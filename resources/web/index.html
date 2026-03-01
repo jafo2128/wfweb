@@ -1062,6 +1062,44 @@ body.digi-open .digi-bar {
 .digi-decode-row.directed .digi-decode-msg { color: #ffc060; font-weight: bold; }
 .digi-decode-row.tx-row .digi-decode-msg { color: #8f8; }
 
+/* CQ controls bar inside the QSO Messages column */
+.digi-msg-cq-bar {
+    display: flex;
+    gap: 3px;
+    padding: 3px 4px;
+    background: #000820;
+    border-bottom: 1px solid #024;
+    flex-shrink: 0;
+}
+.digi-cq-parity-btn {
+    flex: 1;
+    background: #002040;
+    border: 1px solid #036;
+    color: #08a;
+    font-family: 'Courier New', monospace;
+    font-size: 9px;
+    padding: 2px 3px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.digi-cq-parity-btn:hover { background: #003060; border-color: #08f; color: #0af; }
+.digi-call-cq-btn {
+    flex: 1;
+    background: #002820;
+    border: 1px solid #040;
+    color: #0b0;
+    font-family: 'Courier New', monospace;
+    font-size: 9px;
+    padding: 2px 3px;
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.digi-call-cq-btn:hover { background: #003a28; border-color: #0f0; color: #0f0; }
+.digi-call-cq-btn.active { background: #004030; border-color: #0d0; color: #0f0; }
+
 /* 6 QSO message rows — compact, lives inside the msg column */
 .digi-msg-col {
     flex: 0 0 auto;
@@ -1745,6 +1783,10 @@ body.digi-open .digi-bar {
                 </div>
                 <div class="digi-decode-col digi-msg-col">
                     <div class="digi-col-header">QSO Messages</div>
+                    <div class="digi-msg-cq-bar">
+                        <button id="digiCqParityBtn" class="digi-cq-parity-btn" onclick="toggleDigiCqParity()">TX EVEN</button>
+                        <button id="digiCallCqBtn" class="digi-call-cq-btn" onclick="digiCallCq()">CALL CQ</button>
+                    </div>
                     <div id="digiMsgRows" class="digi-msg-rows"></div>
                 </div>
             </div>
@@ -2003,6 +2045,7 @@ var digiTxEnabled = false;
 var digiTxCtx = null; // pre-created from user gesture so it's never suspended
 var digiTxPacerReady = false; // true after first addModule succeeds on digiTxCtx
 var digiTxSlotParity = -1; // 0=even slots, 1=odd slots, -1=unconstrained
+var digiCqParity = 0;      // user-selected parity for CQ calling: 0=even, 1=odd
 var digiTxQueued = null;
 var digiTxArmed = false;
 var digiTxActive = false; // true while audio is streaming — prevents concurrent TXs
@@ -5024,12 +5067,57 @@ function digiRowClick(el) {
     updateDigiMsgRows();
 }
 
-function digiRowDblClick(el) {
-    // Double-click enables TX (if not already enabled)
+// Double-click on a message row: enable TX (if needed) AND arm the message immediately.
+function digiMsgRowDblClick(step) {
+    var msgs = getDigiMsgTexts();
+    var msg = msgs[step];
+    if (!msg || msg === '\u2014') { console.warn('[DIGI] dblclick: msg row ' + (step+1) + ' is empty'); return; }
+    initDigiTxCtx();
     if (!digiTxEnabled) {
-        var btn = document.getElementById('digiEnableTxBtn');
-        if (btn) btn.click();
+        digiTxEnabled = true;
+        var etb = document.getElementById('digiEnableTxBtn');
+        if (etb) etb.classList.add('active');
+        console.log('[DIGI] dblclick: TX enabled');
     }
+    digiTxQueued = msg;
+    digiTxAttempts = 0;
+    digiTxArmed = true;
+    // For CQ messages use the user-chosen parity; for other messages leave unconstrained
+    var isCqMsg = msg.indexOf('CQ ') === 0;
+    digiTxSlotParity = isCqMsg ? digiCqParity : -1;
+    console.log('[DIGI] dblclick: armed "' + msg + '" parity=' + digiTxSlotParity);
+    updateDigiMsgRows();
+}
+
+// Toggle the CQ TX parity preference (even / odd slots)
+function toggleDigiCqParity() {
+    digiCqParity = digiCqParity === 0 ? 1 : 0;
+    var btn = document.getElementById('digiCqParityBtn');
+    if (btn) btn.textContent = digiCqParity === 0 ? 'TX EVEN' : 'TX ODD';
+}
+
+// Start calling CQ: enable TX, arm the CQ message, use the user-selected parity
+function digiCallCq() {
+    var myCall = getMyCall();
+    var myGrid = getMyGrid();
+    if (!myCall) { console.warn('[DIGI] CALL CQ: MY CALL not set'); updateDigiStatus('SET CALL', ''); return; }
+    initDigiTxCtx();
+    var cqMsg = 'CQ ' + myCall + (myGrid ? ' ' + myGrid : '');
+    digiQsoState = 'IDLE';
+    digiQsoPartner = '';
+    digiTheirReport = '';
+    digiTxQueued = cqMsg;
+    digiTxAttempts = 0;
+    digiTxSlotParity = digiCqParity;
+    digiTxEnabled = true;
+    digiTxArmed = true;
+    var etb = document.getElementById('digiEnableTxBtn');
+    if (etb) etb.classList.add('active');
+    var ccb = document.getElementById('digiCallCqBtn');
+    if (ccb) ccb.classList.add('active');
+    console.log('[DIGI] CALL CQ: armed "' + cqMsg + '" parity=' + digiCqParity);
+    updateDigiStatus('CQ…', '');
+    updateDigiMsgRows();
 }
 
 function armMessageForQsoState(decodedSlotIndex) {
@@ -5116,13 +5204,19 @@ function updateDigiMsgRows() {
     for (var i = 0; i < msgs.length; i++) {
         var isArmed = digiTxArmed && digiTxQueued === msgs[i];
         var rowCls = 'digi-msg-row' + (isArmed ? ' armed' : '');
-        html += '<div class="' + rowCls + '" onclick="digiMsgRowClick(' + i + ')">' +
+        html += '<div class="' + rowCls + '" onclick="digiMsgRowClick(' + i + ')" ondblclick="digiMsgRowDblClick(' + i + ')">' +
             '<span class="digi-msg-row-num">' + (i + 1) + '</span>' +
             '<span class="digi-msg-row-text">' + escapeHtml(msgs[i]) + '</span>' +
             '<span class="digi-msg-row-badge">' + (isArmed ? '&#9654; NEXT TX' : '') + '</span>' +
             '</div>';
     }
     container.innerHTML = html;
+    // Keep CALL CQ button lit while a CQ message is armed
+    var ccb = document.getElementById('digiCallCqBtn');
+    if (ccb) {
+        var cqActive = digiTxEnabled && digiTxQueued && digiTxQueued.indexOf('CQ ') === 0;
+        ccb.classList.toggle('active', !!cqActive);
+    }
 }
 
 function queueDigiCqReply(dxCall, decodedSlotIndex) {
