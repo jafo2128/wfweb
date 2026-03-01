@@ -4742,6 +4742,7 @@ function updateDigiStatus(text, cls) {
 // Shared result handler used by both the worker path and the sync fallback path.
 function onFt8DecodeResult(results, decodedSlotIndex) {
     digiDecodeInProgress = false; // unblock TX now that results are in
+    results.sort(function(a, b) { return b.snr - a.snr; }); // strongest signal first
     var now = new Date();
     var timeStr = now.toISOString().substr(11, 8); // HH:MM:SS
     var myCall = getMyCall();
