@@ -32,9 +32,9 @@ Since wfview is on GitLab and wfweb is on GitHub, GitHub's native fork mechanism
 
 ## Screenshots
 
-| SSB | CW with decoder |
-|:---:|:---:|
-| ![SSB mode](ssb.png) | ![CW mode with decoder](cw.png) |
+| SSB | CW with decoder | FT8 |
+|:---:|:---:|:---:|
+| ![SSB mode](ssb.png) | ![CW mode with decoder](cw.png) | ![FT8](ft8.png) |
 
 The web interface is served directly by the `wfview` binary over HTTPS (self-signed certificate). No separate web server is needed. Connect your radio, run `wfview` (the binary retains the upstream name), and open `https://<host>:8080` in any browser. On first visit, accept the browser's certificate warning.
 
@@ -101,7 +101,7 @@ Open your browser at `https://<host>:8080`.
 | ggmorse | any | MIT | Morse code decoding (compiled to WebAssembly for the web frontend) |
 | openssl | any | Apache-2.0 | **Runtime only:** generates the self-signed TLS certificate on first launch, required for HTTPS and browser microphone access |
 
-See [INSTALL.md](INSTALL.md) for full build instructions.
+Clone the repository and run `qmake wfview.pro && make -j$(nproc)`.
 
 ---
 
@@ -114,7 +114,9 @@ See [LICENSE](LICENSE) for the full text.
 All third-party components retain their original licenses:
 - Qt5 components are used under the LGPLv3 — wfweb links dynamically and makes no modifications to Qt itself.
 - QCustomPlot is used under GPLv3, compatible with this project.
+- ft8ts is used under GPLv3, compatible with this project.
 - Speex resampler, libopus, libportaudio, librtaudio, Eigen: see their respective notices in `src/audio/resampler/` and the About box in the application.
+- ggmorse is used under the MIT license.
 
 ---
 
@@ -149,3 +151,9 @@ Full credit for the radio control engine, audio subsystem, waterfall, and everyt
 - And the entire wfview community
 
 Please consider supporting the original project at **https://wfview.org** and **https://www.patreon.com/wfview**.
+
+The FT8/FT4 DIGI panel is powered by **ft8ts**, a pure-TypeScript FT8/FT4 encoder/decoder by e04:
+**https://github.com/e04/ft8ts**
+
+The CW decoder uses **ggmorse**, a Morse code decoding library by Georgi Gerganov:
+**https://github.com/ggerganov/ggmorse**
