@@ -1054,6 +1054,7 @@ body.digi-open .digi-bar {
 .digi-decode-row.tx-row { background: #001a00; border-left: 3px solid #0a0; }
 .digi-decode-row.digi-tx-pending { background: #001020; border-left: 3px solid #444; color: #668; }
 .digi-decode-row.digi-tx-pending .digi-decode-msg { color: #88a; font-style: italic; }
+.digi-logged-row { background: #001800; border-left: 3px solid #0c0; color: #0d0; padding: 2px 6px; font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 0.5px; }
 .digi-decode-row.digi-tx-pending .digi-decode-snr { color: #666; }
 .digi-slot-divider { border-top: 1px solid #048; margin: 4px 0 2px 0; padding: 2px 6px; text-align: center; }
 .digi-slot-divider .digi-slot-time { color: #08f; font-size: 10px; font-weight: bold; }
@@ -1976,6 +1977,7 @@ body.digi-open .digi-bar {
 // STATE
 // ============================================================
 var ws = null;
+var serverVersion = '';  // set from rigInfo message
 var currentFreq = 0;
 var vfoAFreq = 0;
 var vfoBFreq = 0;
@@ -2074,6 +2076,8 @@ var digiCqParity = 0;      // user-selected parity for CQ calling: 0=even, 1=odd
 var digiTxQueued = null;
 var digiTxArmed = false;
 var digiTxActive = false; // true while audio is streaming — prevents concurrent TXs
+var digiTxWfSamples = null; // Float32Array @12kHz fed into wfBuf during TX
+var digiTxWfPos = 0;        // read position into digiTxWfSamples
 var digiTxSeq = 0;
 var digiTxAttempts = 0;
 var DIGI_MAX_TX_ATTEMPTS = 5; // retry same message up to 5 times (~75s for FT8)
@@ -2178,6 +2182,7 @@ function handleMessage(msg) {
     switch (msg.type) {
         case 'rigInfo':
             if (msg.version) {
+                serverVersion = msg.version;
                 var el = document.getElementById('splashVersion');
                 if (el) el.textContent = 'wfweb v. ' + msg.version;
             }
@@ -4462,6 +4467,17 @@ function startDigiPeriodTimer() {
             progressEl.style.width = ((info.slotPhase / info.period) * 100).toFixed(1) + '%';
             progressEl.className = 'digi-progress-fill' + (digiTxActive ? ' tx' : '');
         }
+        // During TX feed locally-generated samples into wfBuf so waterfall shows our signal
+        if (digiTxWfSamples && digiTxWfPos < digiTxWfSamples.length) {
+            var tickSamples = Math.round(12000 * 0.1); // 100 ms per tick
+            var end = Math.min(digiTxWfPos + tickSamples, digiTxWfSamples.length);
+            for (var wi = digiTxWfPos; wi < end; wi++) {
+                wfBuf[wfBufPos] = digiTxWfSamples[wi];
+                wfBufPos++;
+                if (wfBufPos >= WF_FFT_SIZE) { wfBufPos = 0; wfBufFull = true; }
+            }
+            digiTxWfPos = end;
+        }
         drawDigiWaterfall();
 
         // Reset buffer on the first timer tick of each new slot.
@@ -4579,12 +4595,22 @@ function wfFftInPlace(re, im) {
     }
 }
 
+// Returns the Hz offset from the signal BASE frequency to the visual CENTER of the tone span.
+// FT8: 8 tones × 6.25 Hz → center at +21.875 Hz above base
+// FT4: 4 tones × 12.5 Hz → center at +18.75 Hz above base
+function digiCenterOffset() {
+    return digiMode === 'FT8' ? 3.5 * 6.25 : 1.5 * 12.5;
+}
+
 function drawDigiWaterfall() {
     // --- Update DOM frequency markers ---
+    // Markers are placed at the CENTER of the signal's tone span (base + digiCenterOffset)
+    // so they visually align with the signal energy seen in the waterfall.
     var txEl = document.getElementById('digiWfTxMarker');
     var rxEl = document.getElementById('digiWfRxMarker');
-    var txPct = ((digiTxFreq - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * 100).toFixed(3) + '%';
-    var rxPct = ((digiRxFreq - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * 100).toFixed(3) + '%';
+    var co = digiCenterOffset();
+    var txPct = ((digiTxFreq + co - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * 100).toFixed(3) + '%';
+    var rxPct = ((digiRxFreq + co - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * 100).toFixed(3) + '%';
     if (txEl) {
         txEl.style.left = txPct;
         var txColor = digiTxEnabled ? '#ff8800' : '#00aaff';
@@ -4704,7 +4730,7 @@ function drawDigiWaterfall() {
             wfLabelCtx.lineJoin = 'round';
             for (var li = 0; li < visibleLabels.length; li++) {
                 var lbl = visibleLabels[li];
-                var lx = Math.round((lbl.freq - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * w);
+                var lx = Math.round((lbl.freq + digiCenterOffset() - WF_FREQ_LOW) / (WF_FREQ_HIGH - WF_FREQ_LOW) * w);
                 if (lx < 0 || lx >= w) continue;
                 // CQ: bright green / 73: cyan
                 var fillColor   = lbl.cq ? '#40ff80' : '#40e0ff';
@@ -5433,6 +5459,9 @@ function executeDigiTx(slotPhase) {
         } else {
             console.log('[DIGI TX] encoded ' + samples12k.length + ' samples @12kHz, starting stream');
         }
+        // Arm waterfall loopback: feed TX signal progressively in the period timer
+        digiTxWfSamples = samples12k;
+        digiTxWfPos = 0;
         updateDigiStatus('TX', 'tx');
         send({ cmd: 'enableMic', value: true });
 
@@ -5446,6 +5475,7 @@ function executeDigiTx(slotPhase) {
         streamDigiAudio(samples12k, function() {
             // onDone: all audio sent to server; release transmitter
             digiTxActive = false;
+            digiTxWfSamples = null; // stop waterfall loopback
             send({ cmd: 'setPTT', value: false });
             send({ cmd: 'enableMic', value: false });
             console.log('[DIGI TX] PTT OFF — TX complete');
@@ -5508,6 +5538,7 @@ function executeDigiTx(slotPhase) {
         updateDigiStatus('ERR', '');
         digiTxArmed = false;
         digiTxActive = false;
+        digiTxWfSamples = null;
     }
 }
 
@@ -5720,6 +5751,16 @@ function logDigiQso(dxCall, rstSent) {
     digiQsoLog.unshift(entry);
     try { localStorage.setItem('digiQsoLog', JSON.stringify(digiQsoLog.slice(0, 500))); } catch(e) {}
     renderDigiLog();
+    // Show "LOGGED" confirmation in the directed panel
+    var dirPanel = document.getElementById('digiDirectedPanel');
+    if (dirPanel) {
+        var logRow = document.createElement('div');
+        logRow.className = 'digi-logged-row';
+        var timeStr = entry.time ? entry.time.substr(0,2) + ':' + entry.time.substr(2,2) + 'z' : '';
+        logRow.textContent = '✓ LOGGED ' + entry.call + (timeStr ? '  ' + timeStr : '');
+        dirPanel.appendChild(logRow);
+        dirPanel.scrollTop = dirPanel.scrollHeight;
+    }
 }
 
 function renderDigiLog() {
@@ -5981,8 +6022,9 @@ function initDigiHandlers() {
             e.preventDefault();
             var rect = wfBar.getBoundingClientRect();
             var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            var freq = WF_FREQ_LOW + Math.round(((clientX - rect.left) / rect.width) * (WF_FREQ_HIGH - WF_FREQ_LOW));
-            freq = Math.max(WF_FREQ_LOW, Math.min(WF_FREQ_HIGH, freq));
+            // Click position = center of signal; subtract offset to get base (tone 0) frequency
+            var freq = WF_FREQ_LOW + Math.round(((clientX - rect.left) / rect.width) * (WF_FREQ_HIGH - WF_FREQ_LOW)) - Math.round(digiCenterOffset());
+            freq = Math.max(200, Math.min(2700, freq));
             if (!digiHoldTxFreq) {
                 digiTxFreq = freq;
                 digiRxFreq = freq;
@@ -6132,6 +6174,7 @@ function initDigiHandlers() {
             console.log('[DIGI] Halt TX clicked');
             digiTxArmed = false;
             digiTxActive = false;
+            digiTxWfSamples = null;
             digiTxQueued = null;
             digiTxEnabled = false;
             digiTxAttempts = 0;
@@ -6199,7 +6242,7 @@ function initDigiHandlers() {
 // ============================================================
 // INIT
 // ============================================================
-console.log('=== WFVIEW WEB UI v2.1.0 (2026-02-16) - Dual VFO Support ===');
+console.log('=== WFWEB starting (server version available after rigInfo) ===');
 
 setMobileViewportHeight();
 buildColorTable();
