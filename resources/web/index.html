@@ -2077,6 +2077,7 @@ var digiTxQueued = null;
 var digiTxArmed = false;
 var digiTxActive = false; // true while audio is streaming — prevents concurrent TXs
 var digiTxWfSamples = null; // Float32Array @12kHz fed into wfBuf during TX
+var digiMonitorSrc = null; // AudioBufferSourceNode for local TX monitor
 var digiTxWfPos = 0;        // read position into digiTxWfSamples
 var digiTxSeq = 0;
 var digiTxAttempts = 0;
@@ -4435,10 +4436,12 @@ function processDigiAudioChunk(int16Chunk) {
             if (digiRxWritePos < digiRxBuffer.length) {
                 digiRxBuffer[digiRxWritePos++] = sample;
             }
-            // Feed waterfall circular buffer (never reset, continuous)
-            wfBuf[wfBufPos] = sample;
-            wfBufPos++;
-            if (wfBufPos >= WF_FFT_SIZE) { wfBufPos = 0; wfBufFull = true; }
+            // Feed waterfall circular buffer — yield to TX loopback during transmit
+            if (!digiTxActive) {
+                wfBuf[wfBufPos] = sample;
+                wfBufPos++;
+                if (wfBufPos >= WF_FFT_SIZE) { wfBufPos = 0; wfBufFull = true; }
+            }
         }
     }
 }
@@ -5465,6 +5468,20 @@ function executeDigiTx(slotPhase) {
         updateDigiStatus('TX', 'tx');
         send({ cmd: 'enableMic', value: true });
 
+        // Local TX monitor: play the generated audio through browser speakers.
+        // Reuse digiTxCtx (created on user gesture) to satisfy autoplay policy.
+        try {
+            if (digiTxCtx && digiTxCtx.state === 'running') {
+                var monBuf = digiTxCtx.createBuffer(1, samples12k.length, 12000);
+                monBuf.copyToChannel(samples12k, 0);
+                digiMonitorSrc = digiTxCtx.createBufferSource();
+                digiMonitorSrc.buffer = monBuf;
+                digiMonitorSrc.connect(digiTxCtx.destination);
+                digiMonitorSrc.onended = function() { digiMonitorSrc = null; };
+                digiMonitorSrc.start();
+            }
+        } catch(e) { console.warn('[DIGI TX] local monitor error:', e); }
+
         // Capture df/txMsg for the closures below
         var txDf = df;
         var txMsgCapture = txMsg;
@@ -6172,6 +6189,7 @@ function initDigiHandlers() {
     if (haltBtn) {
         haltBtn.addEventListener('click', function() {
             console.log('[DIGI] Halt TX clicked');
+            if (digiMonitorSrc) { try { digiMonitorSrc.stop(); } catch(e) {} digiMonitorSrc = null; }
             digiTxArmed = false;
             digiTxActive = false;
             digiTxWfSamples = null;
