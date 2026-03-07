@@ -1965,7 +1965,7 @@ body.digi-open .digi-bar {
 
         <!-- Warning overlays on spectrum -->
         <div id="audioOffWarning" class="spectrum-warning" onclick="showAudioMicMenu()" style="display: none;">AUDIO OFF</div>
-        <div id="micOffWarning" class="spectrum-warning" onclick="showAudioMicMenu()" style="display: none;">MIC OFF</div>
+        <div id="micOffWarning" class="spectrum-warning" onclick="toggleMic()" style="display: none;">MIC OFF</div>
     </div>
 
     <!-- Row 5: Bottom bar -->
@@ -3115,8 +3115,13 @@ function updateWarningVisibility() {
     // Show audio warning if audio is available but not enabled
     audioWarning.style.display = (audioAvailable && !audioEnabled) ? 'block' : 'none';
 
-    // Show mic warning if TX audio is available but mic is not enabled
-    micWarning.style.display = (txAudioAvailable && window.isSecureContext && !micEnabled) ? 'block' : 'none';
+    // Show mic indicator permanently when TX audio is available; reflect current state
+    if (txAudioAvailable && window.isSecureContext) {
+        micWarning.textContent = micEnabled ? 'MIC ON' : 'MIC OFF';
+        micWarning.style.display = 'block';
+    } else {
+        micWarning.style.display = 'none';
+    }
 }
 
 function handlePTTPress() {
@@ -3385,7 +3390,8 @@ function startMic() {
             source.connect(micWorkletNode);
             micWorkletNode.connect(micAudioCtx.destination);
             micWorkletNode.port.onmessage = function(e) {
-                if (!micEnabled || !ws || ws.readyState !== WebSocket.OPEN) return;
+                // Suppress during DIGI TX (FT8 audio uses same type-0x03 channel)
+                if (!micEnabled || !ws || ws.readyState !== WebSocket.OPEN || digiTxActive) return;
                 var pcmBuffer = e.data;
                 var frame = new ArrayBuffer(6 + pcmBuffer.byteLength);
                 var view = new DataView(frame);
@@ -5148,7 +5154,7 @@ function digiRowDblClick(el) {
         digiTxActive = false;
         digiTxWfSamples = null;
         send({ cmd: 'setPTT', value: false });
-        send({ cmd: 'enableMic', value: false });
+        if (!micEnabled) send({ cmd: 'enableMic', value: false });
     }
     digiRowClick(el); // sets DX, queues message, updates state
     if (!digiTxEnabled) {
@@ -5530,7 +5536,7 @@ function executeDigiTx(slotPhase) {
             digiTxActive = false;
             digiTxWfSamples = null; // stop waterfall loopback
             send({ cmd: 'setPTT', value: false });
-            send({ cmd: 'enableMic', value: false });
+            if (!micEnabled) send({ cmd: 'enableMic', value: false });
             console.log('[DIGI TX] PTT OFF — TX complete');
 
             // Replace transmitting indicator with completed TX row

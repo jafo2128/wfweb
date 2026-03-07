@@ -423,7 +423,7 @@ void webServer::onWsBinaryMessage(QByteArray message)
                 usbAudioOutputDevice = usbAudioOutput->start();
                 if (usbAudioOutputDevice) {
                     usbAudioOutputDevice->write(preTxBuffer);
-                    txAudioActive = true; // arm IdleState watchdog — set AFTER write
+                    txAudioActive = true;
                 } else {
                     qWarning() << "Web: TX audio ALSA start() failed after pre-buffer";
                 }
@@ -1404,15 +1404,6 @@ void webServer::setupUsbAudio(quint32 sampleRate)
         }
 
         usbAudioOutput = new QAudioOutput(usbOutDevice, outFormat, this);
-        // Stop the device cleanly when the buffer drains naturally at end of TX,
-        // preventing ALSA from calling snd_pcm_recover on an empty buffer.
-        connect(usbAudioOutput, &QAudioOutput::stateChanged, this, [this](QAudio::State newState) {
-            if (newState == QAudio::IdleState && txAudioActive) {
-                txAudioActive = false;
-                usbAudioOutput->stop();
-                usbAudioOutputDevice = nullptr;
-            }
-        });
         // Device starts stopped; it is started fresh on each enableMic=true via pre-buffer.
         txAudioConfigured = true;
         qInfo() << "Web: USB audio output configured for TX, channels=" << usbOutputChannels;
