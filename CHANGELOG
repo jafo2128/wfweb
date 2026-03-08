@@ -6,6 +6,40 @@ a built-in web interface. See https://gitlab.com/eliggett/wfview for the
 upstream wfview history.
 
 
+v0.2.3 (2026-03-08)
+--------------------
+
+REST API:
+- New plain-HTTP REST API at /api/v1/radio/* for scripting, automation, and
+  microcontroller integration (ESP32, Pico W, Arduino — no TLS required)
+- In SSL mode a second HTTP listener binds the WebSocket port so curl/scripts
+  can reach the API without a TLS stack
+- Endpoints: frequency, mode, VFO (select/swap/equalize), PTT, meters (S/SWR/power),
+  gains (AF/RF/power/squelch), RX DSP (preamp, NB, NR, AGC, auto-notch, filter
+  width), TX settings (split, tuner, compressor, monitor), CW send/stop
+- Full combined status via GET /api/v1/radio; CORS headers on all responses
+- Fix: buffer incoming data per-socket so requests fragmented across TCP
+  segments are fully reassembled before parsing
+
+DIGI panel (FT8/FT4):
+- Auto-tune to standard FT8/FT4 calling frequency when the DIGI panel is
+  opened, matched by nearest VFO within 500 kHz
+- Block self-QSO clicks: clicking a decode row transmitted by MY CALL is
+  now a no-op
+
+Audio:
+- Fix mic audio loss after FT8 TX: FT8 completion no longer tears down the
+  USB audio path when the user mic is active; mic frames are suppressed
+  during TX without closing the AudioWorklet session
+- Remove over-aggressive ALSA IdleState watchdog that dropped mic frames
+  after any buffer underrun; ALSA's own snd_pcm_recover handles transients
+- MIC OFF overlay is now a persistent MIC ON/OFF toggle button
+
+Documentation:
+- REST_API.md: full endpoint reference with curl examples, response schemas,
+  port table, and shell scripting recipes
+
+
 v0.2.2 (2026-03-03)
 --------------------
 
