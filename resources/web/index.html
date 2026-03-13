@@ -3935,18 +3935,18 @@ function hideMacroEditor() {
 }
 
 // CW transmission state
-var cwAudioContext = null; // Kept for compatibility, not used for sidetone
-var cwNextCharTime = 0; // Cumulative timing for character scheduling
+var cwTransmitStartTime = 0; // Wall-clock time when current CW transmission started
 
 function playCWSidetone(text, startIndex) {
     // Radio sidetone mode: no local sidetone generation
     // Just schedule character status updates for the transcript display
-    scheduleCharacterUpdates(text, startIndex, 0);
+    scheduleCharacterUpdates(text, startIndex);
 }
 
-function scheduleCharacterUpdates(text, startIndex, startDelayMs) {
+function scheduleCharacterUpdates(text, startIndex) {
     // Update specific characters starting at startIndex
-    // Schedule their status updates relative to when this buffer starts playing
+    // Schedule their status updates using wall-clock time so appended
+    // transmissions continue seamlessly from the current progress.
 
     var morse = {
         'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.',
@@ -3967,8 +3967,8 @@ function scheduleCharacterUpdates(text, startIndex, startDelayMs) {
 
     if (startIndex >= cwCharacters.length) return; // Invalid index
 
-    // Get the first character's start time for relative calculation
-    var firstCharStartTime = cwCharacters[startIndex].startTime;
+    var now = Date.now();
+    var elapsed = now - cwTransmitStartTime;
 
     // Schedule updates for each character in this transmission
     for (var i = 0; i < text.length && (startIndex + i) < cwCharacters.length; i++) {
@@ -3977,9 +3977,8 @@ function scheduleCharacterUpdates(text, startIndex, startDelayMs) {
         (function(charObj) {
             var char = charObj.char;
 
-            // Calculate when this character starts relative to buffer start
-            var charRelativeStart = charObj.startTime - firstCharStartTime;
-            var actualStartTime = startDelayMs + charRelativeStart;
+            // Delay from now = when char should start minus time already elapsed
+            var actualStartTime = charObj.startTime - elapsed;
 
             // Mark as "sending" when transmission starts
             var timer1 = setTimeout(function() {
@@ -4131,6 +4130,11 @@ function sendCWText(text) {
     // Update next character time for cumulative tracking
     cwNextCharTime = currentTime;
 
+    // Record wall-clock start time for first batch
+    if (startIndex === 0) {
+        cwTransmitStartTime = Date.now();
+    }
+
     send({ cmd: 'sendCW', text: text });
     playCWSidetone(text, startIndex); // Pass the starting index
     updateCWTranscript();
@@ -4174,6 +4178,7 @@ function initCWHandlers() {
         cwCharacters = [];
         cwCharIndex = 0;
         cwNextCharTime = 0;
+        cwTransmitStartTime = 0;
         clearCWTimers(); // Clear all pending character update timers
         updateCWTranscript();
     });
@@ -4187,6 +4192,7 @@ function initCWHandlers() {
         cwCharacters = [];
         cwCharIndex = 0;
         cwNextCharTime = 0;
+        cwTransmitStartTime = 0;
         clearCWTimers(); // Clear all pending character update timers
         send({ cmd: 'stopCW' });
         setPanel('default'); // Return to default panel
