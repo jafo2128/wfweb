@@ -88,7 +88,9 @@ html, body {
     display: block; width: 2px; height: 12px;
     background: #888; border-radius: 1px;
 }
-#filterText { color: #888; font-size: 11px; font-weight: bold; }
+#filterText { color: #888; font-size: 11px; font-weight: bold; cursor: pointer; }
+#filterText.clickable { color: #0aa; }
+#filterText.clickable:active { color: #0ff; }
 #dspIndicators { display: flex; gap: 4px; margin-left: 6px; }
 .dsp-tag {
     font-size: 9px; font-weight: bold;
@@ -1457,6 +1459,50 @@ body.digi-open .digi-bar {
     margin: 0;
 }
 
+/* FILTER overlay */
+#filterOverlay.visible {
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 16px;
+    gap: 8px;
+}
+#filterOverlay .filter-btn-row {
+    display: flex; gap: 6px; justify-content: center;
+    margin-bottom: 4px;
+}
+#filterOverlay .filter-btn {
+    padding: 6px 16px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #888;
+    font-size: 11px; font-weight: bold;
+    cursor: pointer; border-radius: 3px;
+}
+#filterOverlay .filter-btn.active {
+    background: #066; border-color: #0aa; color: #0ff;
+}
+#filterOverlay .shape-btn-row {
+    display: flex; gap: 6px; align-items: center;
+    margin-top: 4px;
+}
+#filterOverlay .shape-btn {
+    padding: 5px 14px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #888;
+    font-size: 10px; font-weight: bold;
+    cursor: pointer; border-radius: 3px;
+}
+#filterOverlay .shape-btn.active {
+    background: #066; border-color: #0aa; color: #0ff;
+}
+.gain-bar-fill.centered {
+    position: absolute; top: 0; height: 100%;
+    background: linear-gradient(90deg, #066, #0aa);
+    border-radius: 2px;
+    transition: left 0.05s linear, width 0.05s linear;
+}
+
 /* FREQ INPUT overlay */
 #freqOverlay.visible {
     flex-direction: column;
@@ -1698,7 +1744,7 @@ body.digi-open .digi-bar {
         <span id="tuneLabel">TUNE</span>
         <button id="modeBtn" onclick="setPanel('mode')">---</button>
         <span id="pbBars"><i></i><i></i></span>
-        <span id="filterText">FIL1</span>
+        <span id="filterText" onclick="if(hasFilterSettings)setPanel('filter')">FIL1</span>
         <span id="dspIndicators"></span>
         <span class="flex-space"></span>
         <button id="qsoLogBtn" class="qso-log-btn" title="Log QSO">LOG</button>
@@ -1959,6 +2005,45 @@ body.digi-open .digi-bar {
             </div>
         </div>
 
+        <!-- Filter overlay -->
+        <div id="filterOverlay" class="overlay">
+            <div class="overlay-title" id="filterOverlayTitle">FILTER</div>
+            <div class="filter-btn-row" id="filterBtnRow">
+                <button class="filter-btn" id="filBtn1" onclick="sendFilter(1)">FIL1</button>
+                <button class="filter-btn" id="filBtn2" onclick="sendFilter(2)">FIL2</button>
+                <button class="filter-btn" id="filBtn3" onclick="sendFilter(3)">FIL3</button>
+            </div>
+            <div id="filterAdjustControls">
+                <div class="gain-row">
+                    <span class="gain-label">BW</span>
+                    <div class="gain-bar-bg"><div class="gain-bar-fill" id="filterWidthFill" style="width:30%"></div>
+                        <input type="range" id="filterWidthSlider" min="0" max="40" value="30"></div>
+                    <span class="gain-val" id="filterWidthVal">3.0k</span>
+                </div>
+                <div class="gain-row">
+                    <span class="gain-label">PBT1</span>
+                    <div class="gain-bar-bg"><div class="gain-bar-fill centered" id="pbtInnerFill" style="left:50%;width:0%"></div>
+                        <input type="range" id="pbtInnerSlider" min="0" max="255" value="128"></div>
+                    <span class="gain-val" id="pbtInnerVal">0</span>
+                </div>
+                <div class="gain-row">
+                    <span class="gain-label">PBT2</span>
+                    <div class="gain-bar-bg"><div class="gain-bar-fill centered" id="pbtOuterFill" style="left:50%;width:0%"></div>
+                        <input type="range" id="pbtOuterSlider" min="0" max="255" value="128"></div>
+                    <span class="gain-val" id="pbtOuterVal">0</span>
+                </div>
+                <div class="shape-btn-row">
+                    <button class="shape-btn" id="sharpBtn" onclick="sendFilterShape(0)">SHARP</button>
+                    <button class="shape-btn" id="softBtn" onclick="sendFilterShape(1)">SOFT</button>
+                    <span class="flex-space"></span>
+                    <button class="shape-btn" onclick="resetPBT()">RESET</button>
+                </div>
+            </div>
+            <div class="gain-back-row">
+                <button class="ov-btn back-btn" onclick="setPanel('default')" style="width:60px">&#x21A9;</button>
+            </div>
+        </div>
+
         <!-- Freq input overlay -->
         <div id="freqOverlay" class="overlay">
             <div class="overlay-title">F-INP</div>
@@ -2049,6 +2134,28 @@ var anfOn = false;
 var tunerState = 0;
 var currentPreamp = 0;
 var currentFilter = 1;
+var currentPBTInner = 128;
+var currentPBTOuter = 128;
+var currentFilterShape = 0;
+var currentFilterWidth = 3000;
+var hasFilterSettings = false;
+var filterModeType = 'ssb'; // 'ssb', 'am', 'fm'
+
+// SSB/CW/RTTY: 50-500 step 50, 600-3600 step 100
+var ssbFilterValues = (function() {
+    var v = [];
+    for (var i = 50; i <= 500; i += 50) v.push(i);
+    for (var i = 600; i <= 3600; i += 100) v.push(i);
+    return v;
+})();
+// AM: 200-10000 step 200
+var amFilterValues = (function() {
+    var v = [];
+    for (var i = 200; i <= 10000; i += 200) v.push(i);
+    return v;
+})();
+var fmFixedBW = [15000, 10000, 7000];
+var filterWidthValues = ssbFilterValues;
 
 var availableSpans = [];
 var currentSpanIndex = -1;
@@ -2223,6 +2330,7 @@ function handleMessage(msg) {
                 if (msg.spans) populateSpans(msg.spans);
                 if (msg.preamps) populatePreamps(msg.preamps);
                 if (msg.filters) populateFilters(msg.filters);
+                if (msg.hasFilterSettings !== undefined) updateHasFilterSettings(msg.hasFilterSettings);
                 updateWarningVisibility();
             }
             break;
@@ -2235,6 +2343,7 @@ function handleMessage(msg) {
             if (msg.spans) populateSpans(msg.spans);
             if (msg.preamps) populatePreamps(msg.preamps);
             if (msg.filters) populateFilters(msg.filters);
+            if (msg.hasFilterSettings !== undefined) updateHasFilterSettings(msg.hasFilterSettings);
             updateWarningVisibility();
             break;
         case 'audioAvailable':
@@ -2287,6 +2396,9 @@ function handleMessage(msg) {
             if (msg.tuner !== undefined) updateTunerState(msg.tuner);
             if (msg.preamp !== undefined) updatePreampBtn(msg.preamp);
             if (msg.filterWidth !== undefined) updateSlider('filterWidth', msg.filterWidth);
+            if (msg.pbtInner !== undefined) updateSlider('pbtInner', msg.pbtInner);
+            if (msg.pbtOuter !== undefined) updateSlider('pbtOuter', msg.pbtOuter);
+            if (msg.filterShape !== undefined) updateFilterShapeBtn(msg.filterShape);
             break;
         case 'update':
             // Handle VFO-specific frequencies if available
@@ -2324,6 +2436,9 @@ function handleMessage(msg) {
             if (msg.tuner !== undefined) updateTunerState(msg.tuner);
             if (msg.preamp !== undefined) updatePreampBtn(msg.preamp);
             if (msg.filterWidth !== undefined) updateSlider('filterWidth', msg.filterWidth);
+            if (msg.pbtInner !== undefined) updateSlider('pbtInner', msg.pbtInner);
+            if (msg.pbtOuter !== undefined) updateSlider('pbtOuter', msg.pbtOuter);
+            if (msg.filterShape !== undefined) updateFilterShapeBtn(msg.filterShape);
             break;
         case 'meters':
             if (msg.sMeter !== undefined) updateSMeter(msg.sMeter);
@@ -2395,6 +2510,8 @@ function updateMode(mode) {
     currentMode = mode;
     document.getElementById('modeBtn').textContent = mode;
     if (currentPanel === 'mode') renderModeOverlay();
+    updateFilterConfig();
+    if (currentPanel === 'filter') renderFilterOverlay();
 
     // Hide CW bar if switching to non-CW mode
     var isCW = (mode === 'CW' || mode === 'CW-R');
@@ -2412,6 +2529,104 @@ function updateFilterBtn(num) {
     currentFilter = num;
     document.getElementById('filterText').textContent = 'FIL' + num;
     if (currentPanel === 'func') renderFuncOverlay();
+    if (currentPanel === 'filter') updateFilterBtnHighlight();
+}
+
+function updateFilterBtnHighlight() {
+    for (var i = 1; i <= 3; i++) {
+        var btn = document.getElementById('filBtn' + i);
+        if (btn) btn.className = 'filter-btn' + (currentFilter === i ? ' active' : '');
+    }
+}
+
+function updateFilterShapeBtn(val) {
+    // Decode: val / 10 = filter, val % 10 = shape (0=Sharp, 1=Soft)
+    currentFilterShape = val % 10;
+    document.getElementById('sharpBtn').className = 'shape-btn' + (currentFilterShape === 0 ? ' active' : '');
+    document.getElementById('softBtn').className = 'shape-btn' + (currentFilterShape === 1 ? ' active' : '');
+}
+
+function sendFilter(num) {
+    send({ cmd: 'setFilter', value: num });
+}
+
+function sendFilterShape(shape) {
+    send({ cmd: 'setFilterShape', value: shape });
+}
+
+function resetPBT() {
+    send({ cmd: 'setPBTInner', value: 128 });
+    send({ cmd: 'setPBTOuter', value: 128 });
+    updateSlider('pbtInner', 128);
+    updateSlider('pbtOuter', 128);
+}
+
+function updateHasFilterSettings(has) {
+    hasFilterSettings = has;
+    var ft = document.getElementById('filterText');
+    if (ft) ft.classList.toggle('clickable', has);
+}
+
+function getFilterModeType(mode) {
+    if (mode === 'FM') return 'fm';
+    if (mode === 'AM') return 'am';
+    return 'ssb';
+}
+
+function updateFilterConfig() {
+    filterModeType = getFilterModeType(currentMode);
+    if (filterModeType === 'am') filterWidthValues = amFilterValues;
+    else filterWidthValues = ssbFilterValues;
+    var slider = document.getElementById('filterWidthSlider');
+    if (slider && filterModeType !== 'fm') {
+        slider.max = filterWidthValues.length - 1;
+        slider.value = hzToSliderPos(currentFilterWidth);
+    }
+}
+
+function hzToSliderPos(hz) {
+    var closest = 0;
+    var minDiff = Math.abs(filterWidthValues[0] - hz);
+    for (var i = 1; i < filterWidthValues.length; i++) {
+        var diff = Math.abs(filterWidthValues[i] - hz);
+        if (diff < minDiff) { minDiff = diff; closest = i; }
+    }
+    return closest;
+}
+
+function sliderPosToHz(pos) {
+    pos = Math.max(0, Math.min(pos, filterWidthValues.length - 1));
+    return filterWidthValues[pos];
+}
+
+function renderFilterOverlay() {
+    updateFilterConfig();
+    updateFilterBtnHighlight();
+    updateFilterShapeBtn(currentFilterShape);
+
+    var adjust = document.getElementById('filterAdjustControls');
+
+    if (filterModeType === 'fm') {
+        adjust.classList.add('hidden');
+        document.getElementById('filBtn1').textContent = 'FIL1 15k';
+        document.getElementById('filBtn2').textContent = 'FIL2 10k';
+        document.getElementById('filBtn3').textContent = 'FIL3 7k';
+    } else {
+        adjust.classList.remove('hidden');
+        document.getElementById('filBtn1').textContent = 'FIL1';
+        document.getElementById('filBtn2').textContent = 'FIL2';
+        document.getElementById('filBtn3').textContent = 'FIL3';
+        // Sync slider position from current Hz value
+        var slider = document.getElementById('filterWidthSlider');
+        var pos = hzToSliderPos(currentFilterWidth);
+        slider.value = pos;
+        document.getElementById('filterWidthVal').textContent = formatBW(currentFilterWidth);
+        document.getElementById('filterWidthFill').style.width = (pos / (filterWidthValues.length - 1) * 100) + '%';
+    }
+
+    var title = document.getElementById('filterOverlayTitle');
+    if (title) title.textContent = 'FILTER (' + currentMode + ')';
+    document.getElementById('filterOverlay').classList.add('visible');
 }
 
 function updateTxStatus(tx) {
@@ -2485,6 +2700,57 @@ function initSliderTracking() {
             else if (name === 'squelch') throttledSend('squelch', 'setSquelch', val);
         });
     });
+    // Filter overlay sliders
+    ['filterWidth', 'pbtInner', 'pbtOuter'].forEach(function(name) {
+        var slider = document.getElementById(name + 'Slider');
+        if (!slider) return;
+        slider.addEventListener('mousedown', function() { sliderDragging[name] = true; });
+        slider.addEventListener('touchstart', function() { sliderDragging[name] = true; });
+        slider.addEventListener('mouseup', function() { sliderDragging[name] = false; });
+        slider.addEventListener('touchend', function() { sliderDragging[name] = false; });
+        slider.addEventListener('mouseleave', function() { sliderDragging[name] = false; });
+        slider.addEventListener('touchcancel', function() { sliderDragging[name] = false; });
+        slider.addEventListener('input', function() {
+            var val = parseInt(slider.value);
+            sliderSetTimes[name] = Date.now();
+            if (name === 'filterWidth') {
+                var hz = sliderPosToHz(val);
+                currentFilterWidth = hz;
+                document.getElementById('filterWidthVal').textContent = formatBW(hz);
+                document.getElementById('filterWidthFill').style.width = (val / (filterWidthValues.length - 1) * 100) + '%';
+                throttledSend('filterWidth', 'setFilterWidth', hz);
+            } else if (name === 'pbtInner') {
+                currentPBTInner = val;
+                document.getElementById('pbtInnerVal').textContent = val - 128;
+                updatePBTFill('pbtInnerFill', val);
+                throttledSend('pbtInner', 'setPBTInner', val);
+            } else if (name === 'pbtOuter') {
+                currentPBTOuter = val;
+                document.getElementById('pbtOuterVal').textContent = val - 128;
+                updatePBTFill('pbtOuterFill', val);
+                throttledSend('pbtOuter', 'setPBTOuter', val);
+            }
+        });
+    });
+}
+
+function formatBW(val) {
+    if (val >= 1000) return (val / 1000).toFixed(val % 100 === 0 ? 1 : 2) + 'k';
+    return val.toString();
+}
+
+function updatePBTFill(id, val) {
+    var fill = document.getElementById(id);
+    if (!fill) return;
+    var pct = val / 255 * 100;
+    var center = 50;
+    if (pct >= center) {
+        fill.style.left = center + '%';
+        fill.style.width = (pct - center) + '%';
+    } else {
+        fill.style.left = pct + '%';
+        fill.style.width = (center - pct) + '%';
+    }
 }
 
 function updateSlider(name, val) {
@@ -2493,6 +2759,28 @@ function updateSlider(name, val) {
     var slider = document.getElementById(name + 'Slider');
     var valSpan = document.getElementById(name + 'Val');
     if (slider) slider.value = val;
+    // Custom display for filter sliders
+    if (name === 'filterWidth') {
+        currentFilterWidth = val;
+        var pos = hzToSliderPos(val);
+        if (slider) slider.value = pos;
+        if (valSpan) valSpan.textContent = formatBW(val);
+        var fwFill = document.getElementById('filterWidthFill');
+        if (fwFill) fwFill.style.width = (pos / Math.max(1, filterWidthValues.length - 1) * 100) + '%';
+        return;
+    }
+    if (name === 'pbtInner') {
+        currentPBTInner = val;
+        if (valSpan) valSpan.textContent = val - 128;
+        updatePBTFill('pbtInnerFill', val);
+        return;
+    }
+    if (name === 'pbtOuter') {
+        currentPBTOuter = val;
+        if (valSpan) valSpan.textContent = val - 128;
+        updatePBTFill('pbtOuterFill', val);
+        return;
+    }
     if (valSpan) valSpan.textContent = val;
     // Update fill bars
     var fillId = name + 'Fill';
@@ -2824,6 +3112,7 @@ function setPanel(name) {
     else if (name === 'func') renderFuncOverlay();
     else if (name === 'audiomiс') renderAudioMicOverlay();
     else if (name === 'gain') document.getElementById('gainOverlay').classList.add('visible');
+    else if (name === 'filter') renderFilterOverlay();
     else if (name === 'scope') {}
     else if (name === 'span') renderSpanOverlay();
     else if (name === 'freqinp') renderFreqInput();

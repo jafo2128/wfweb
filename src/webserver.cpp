@@ -1149,6 +1149,27 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         ushort val = static_cast<ushort>(qBound(0, cmd["value"].toInt(), 10000));
         queue->addUnique(priorityImmediate, queueItem(funcFilterWidth, QVariant::fromValue<ushort>(val), false, 0));
     }
+    else if (type == "setPBTInner") {
+        ushort val = static_cast<ushort>(qBound(0, cmd["value"].toInt(), 255));
+        queue->addUnique(priorityImmediate, queueItem(funcPBTInner, QVariant::fromValue<ushort>(val), false, 0));
+    }
+    else if (type == "setPBTOuter") {
+        ushort val = static_cast<ushort>(qBound(0, cmd["value"].toInt(), 255));
+        queue->addUnique(priorityImmediate, queueItem(funcPBTOuter, QVariant::fromValue<ushort>(val), false, 0));
+    }
+    else if (type == "setFilterShape") {
+        int shape = qBound(0, cmd["value"].toInt(), 1);  // 0=sharp, 1=soft
+        // Get current filter from mode cache
+        int filter = 1;
+        vfoCommandType t = queue->getVfoCommand(vfoA, 0, false);
+        cacheItem modeCache = queue->getCache(t.modeFunc, 0);
+        if (modeCache.value.isValid()) {
+            modeInfo m = modeCache.value.value<modeInfo>();
+            filter = qBound(1, (int)m.filter, 3);
+        }
+        uchar val = uchar(shape + (filter * 10));
+        queue->addUnique(priorityImmediate, queueItem(funcFilterShape, QVariant::fromValue<uchar>(val), false, 0));
+    }
     else if (type == "setFilter") {
         int filterNum = cmd["value"].toInt();
         if (filterNum >= 1 && filterNum <= 3) {
@@ -1306,6 +1327,7 @@ QJsonObject webServer::buildInfoJson() const
             info["audioSampleRate"] = (int)rigSampleRate;
         }
         info["txAudioAvailable"] = txAudioConfigured;
+        info["hasFilterSettings"] = rigCaps->commands.contains(funcPBTInner);
         if (!rigCaps->scopeCenterSpans.empty()) {
             QJsonArray spans;
             for (const centerSpanData &s : rigCaps->scopeCenterSpans) {
@@ -1473,6 +1495,16 @@ QJsonObject webServer::buildStatusJson()
     cacheItem fw = queue->getCache(funcFilterWidth, 0);
     if (fw.value.isValid()) status["filterWidth"] = fw.value.toInt();
 
+    // PBT Inner/Outer
+    cacheItem pbtIn = queue->getCache(funcPBTInner, 0);
+    if (pbtIn.value.isValid()) status["pbtInner"] = pbtIn.value.toInt();
+    cacheItem pbtOut = queue->getCache(funcPBTOuter, 0);
+    if (pbtOut.value.isValid()) status["pbtOuter"] = pbtOut.value.toInt();
+
+    // Filter Shape
+    cacheItem fs = queue->getCache(funcFilterShape, 0);
+    if (fs.value.isValid()) status["filterShape"] = fs.value.toInt();
+
     // Spectrum span
     cacheItem spanCache = queue->getCache(funcScopeSpan, 0);
     if (spanCache.value.isValid() && rigCaps) {
@@ -1589,6 +1621,15 @@ void webServer::receiveCache(cacheItem item)
         break;
     case funcFilterWidth:
         update["filterWidth"] = item.value.toInt();
+        break;
+    case funcPBTInner:
+        update["pbtInner"] = item.value.toInt();
+        break;
+    case funcPBTOuter:
+        update["pbtOuter"] = item.value.toInt();
+        break;
+    case funcFilterShape:
+        update["filterShape"] = item.value.toInt();
         break;
     case funcScopeSpan:
     {
