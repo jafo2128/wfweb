@@ -2000,6 +2000,12 @@ body.digi-open .digi-bar {
                     <input type="range" id="squelchSlider" min="0" max="255" value="0"></div>
                 <span class="gain-val" id="squelchVal">0</span>
             </div>
+            <div class="gain-row">
+                <span class="gain-label">MIC</span>
+                <div class="gain-bar-bg"><div class="gain-bar-fill" id="micGainFill" style="width:50%"></div>
+                    <input type="range" id="micGainSlider" min="0" max="255" value="128"></div>
+                <span class="gain-val" id="micGainVal">128</span>
+            </div>
             <div class="gain-back-row">
                 <button class="ov-btn back-btn" onclick="setPanel('default')">&#x21A9;</button>
             </div>
@@ -2388,6 +2394,7 @@ function handleMessage(msg) {
             if (msg.rfGain !== undefined) updateSlider('rfGain', msg.rfGain);
             if (msg.rfPower !== undefined) updateSlider('rfPower', msg.rfPower);
             if (msg.squelch !== undefined) updateSlider('squelch', msg.squelch);
+            if (msg.micGain !== undefined) updateSlider('micGain', msg.micGain);
             if (msg.split !== undefined) updateSplit(msg.split);
             if (msg.spanIndex !== undefined) updateSpanIndex(msg.spanIndex);
             if (msg.nb !== undefined) updateToggle('nb', msg.nb);
@@ -2428,6 +2435,7 @@ function handleMessage(msg) {
             if (msg.rfGain !== undefined) updateSlider('rfGain', msg.rfGain);
             if (msg.rfPower !== undefined) updateSlider('rfPower', msg.rfPower);
             if (msg.squelch !== undefined) updateSlider('squelch', msg.squelch);
+            if (msg.micGain !== undefined) updateSlider('micGain', msg.micGain);
             if (msg.split !== undefined) updateSplit(msg.split);
             if (msg.spanIndex !== undefined) updateSpanIndex(msg.spanIndex);
             if (msg.nb !== undefined) updateToggle('nb', msg.nb);
@@ -2676,7 +2684,7 @@ var sliderDragging = {};
 var SLIDER_DEBOUNCE_MS = 1500;
 
 function initSliderTracking() {
-    ['afGain', 'rfGain', 'rfPower', 'squelch'].forEach(function(name) {
+    ['afGain', 'rfGain', 'rfPower', 'squelch', 'micGain'].forEach(function(name) {
         var slider = document.getElementById(name + 'Slider');
         if (!slider) return;
         slider.addEventListener('mousedown', function() { sliderDragging[name] = true; });
@@ -2695,6 +2703,7 @@ function initSliderTracking() {
             else if (name === 'rfGain') throttledSend('rfGain', 'setRfGain', val);
             else if (name === 'rfPower') throttledSend('rfPower', 'setRfPower', val);
             else if (name === 'squelch') throttledSend('squelch', 'setSquelch', val);
+            else if (name === 'micGain') throttledSend('micGain', 'setMicGain', val);
         });
     });
     // Filter overlay sliders
