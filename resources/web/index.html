@@ -1229,6 +1229,19 @@ body.digi-open .digi-bar {
     border-radius: 2px;
 }
 .digi-halt-btn:active { background: #800; color: #000; }
+.digi-tune-btn {
+    padding: 2px 8px;
+    background: #181800;
+    border: 1px solid #880;
+    color: #cc4;
+    font-size: 11px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    cursor: pointer;
+    border-radius: 2px;
+}
+.digi-tune-btn.active { background: #443000; border-color: #fa0; color: #fa0; }
+.digi-tune-btn:active { background: #880; color: #000; }
 .digi-callsign-input {
     background: #000;
     border: 1px solid #048;
@@ -1882,6 +1895,7 @@ body.digi-open .digi-bar {
                 <input type="text" id="digiDxCall" class="digi-callsign-input" maxlength="10" placeholder="DX" autocomplete="off">
                 <button id="digiEnableTxBtn" class="digi-enable-tx-btn">Enable TX</button>
                 <button id="digiHaltBtn" class="digi-halt-btn">Halt TX</button>
+                <button id="digiTuneBtn" class="digi-tune-btn">Tune</button>
             </div>
 
             <!-- Two-column decode area -->
@@ -2016,7 +2030,7 @@ body.digi-open .digi-bar {
                 <span class="gain-val" id="squelchVal">0</span>
             </div>
             <div class="gain-row">
-                <span class="gain-label">MIC</span>
+                <span class="gain-label">USB MIC</span>
                 <div class="gain-bar-bg"><div class="gain-bar-fill" id="micGainFill" style="width:50%"></div>
                     <input type="range" id="micGainSlider" min="0" max="255" value="128"></div>
                 <span class="gain-val" id="micGainVal">128</span>
@@ -2236,6 +2250,10 @@ var digiTxUserInitiated = false; // true when TX was armed by a user gesture (db
 var digiTxWfPos = 0;        // read position into digiTxWfSamples
 var digiTxSeq = 0;
 var digiTxAttempts = 0;
+var digiTuneActive = false;
+var digiSavedModLevel = -1;    // saved USB Mod Level before entering DIGI mode
+var DIGI_MOD_LEVEL = 192;      // USB Mod Level during DIGI mode (~75%)
+var digiTuneNode = null;    // AudioWorkletNode for continuous tune tone
 var DIGI_MAX_TX_ATTEMPTS = 5; // retry same message up to 5 times (~75s for FT8)
 var digiDecodes = [];
 var digiDirectedDecodes = [];
@@ -2851,10 +2869,10 @@ var METER_DARK = '#1c1c1c';     // inactive segment
 var METER_BASELINE = '#999';    // thin white line under segments
 
 var alcVal = 0;
-var digiTxGain = 1.0;          // FT8/FT4 audio gain multiplier (reduced by ALC feedback)
-var ALC_THRESHOLD = 0.05;      // ALC value above which we start reducing gain (scale 0-1-2)
-var ALC_STEP_DOWN = 0.02;      // gain reduction per ALC update when over threshold
-var ALC_STEP_UP = 0.005;       // gain recovery per ALC update when under threshold
+var digiTxGain = 1.0;          // FT8/FT4 audio gain multiplier
+var ALC_TARGET = 0.05;         // target ALC level (5%)
+var ALC_STEP_DOWN = 0.02;      // gain reduction per ALC update when over target
+var ALC_STEP_UP = 0.01;        // gain increase per ALC update when under target
 var ALC_MIN_GAIN = 0.05;       // minimum gain floor
 
 function updateSMeter(val) { meterVal = val; if (!isTransmitting) drawMeter(); }
@@ -2863,12 +2881,11 @@ function updateSwrMeter(val) { swrVal = val; if (isTransmitting) drawMeter(); }
 function updateALCMeter(val) {
     alcVal = val;
     if (isTransmitting) drawMeter();
-    // Auto-adjust FT8/FT4 TX gain based on ALC
-    if (digiTxActive && isTransmitting) {
-        if (alcVal > ALC_THRESHOLD) {
+    // Auto-adjust FT8/FT4 audio gain to keep ALC at ~5%
+    if ((digiTxActive || digiTuneActive) && isTransmitting) {
+        if (alcVal > ALC_TARGET) {
             digiTxGain = Math.max(ALC_MIN_GAIN, digiTxGain - ALC_STEP_DOWN);
-            console.log('[ALC] reducing digiTxGain to ' + digiTxGain.toFixed(3) + ' (ALC=' + alcVal.toFixed(2) + ')');
-        } else if (digiTxGain < 1.0) {
+        } else if (alcVal < ALC_TARGET && digiTxGain < 1.0) {
             digiTxGain = Math.min(1.0, digiTxGain + ALC_STEP_UP);
         }
     }
@@ -3069,11 +3086,10 @@ function drawTxMeters(ctx, cw, ch, barX, barW, segW, segGap, segX, labelW) {
     });
 
     // ALC indicator — visible during DIGI TX
-    if (digiTxActive) {
+    if (digiTxActive || digiTuneActive) {
         var alcPct = Math.round(alcVal * 100);
-        var alcColor = alcVal > ALC_THRESHOLD ? '#ff4444' : '#44cc44';
+        var alcColor = alcVal > ALC_TARGET ? '#ff4444' : '#44cc44';
         var alcText = 'ALC ' + alcPct + '%';
-        if (digiTxGain < 1.0) alcText += ' G' + Math.round(digiTxGain * 100) + '%';
         ctx.fillStyle = alcColor;
         ctx.font = 'bold 9px system-ui, sans-serif';
         ctx.textAlign = 'right';
@@ -4804,6 +4820,12 @@ function toggleDigiBar() {
         document.body.classList.add('digi-open');
         // FT8 requires USB — set it automatically on open
         if (currentMode !== 'USB') setMode('USB');
+        // Set USB Mod Level to 75% for DIGI; save previous value
+        var slider = document.getElementById('micGainSlider');
+        digiSavedModLevel = slider ? parseInt(slider.value) : -1;
+        throttledSend('micGain', 'setMicGain', DIGI_MOD_LEVEL);
+        updateSlider('micGain', DIGI_MOD_LEVEL);
+        digiTxGain = 1.0; // reset audio gain for new session
         // Tune to the FT8/FT4 frequency for the current band
         var band = getCurrentDigiBand();
         var bandSel = document.getElementById('digiBandSel');
@@ -4822,7 +4844,15 @@ function toggleDigiBar() {
     } else {
         bar.classList.add('hidden');
         document.body.classList.remove('digi-open');
+        stopDigiTune();
         stopDigiPeriodTimer();
+        // Restore USB Mod Level
+        if (digiSavedModLevel >= 0) {
+            throttledSend('micGain', 'setMicGain', digiSavedModLevel);
+            updateSlider('micGain', digiSavedModLevel);
+            digiSavedModLevel = -1;
+        }
+        digiTxGain = 1.0;
         digiRxEnabled = false;
         updateDigiRxToggle();
         if (digiTxCtx) { digiTxCtx.close(); digiTxCtx = null; digiTxPacerReady = false; }
@@ -6067,6 +6097,132 @@ function executeDigiTx(slotPhase) {
     }
 }
 
+function stopDigiTune() {
+    if (!digiTuneActive) return;
+    digiTuneActive = false;
+    if (digiTuneNode) {
+        digiTuneNode.port.postMessage('stop');
+        digiTuneNode.disconnect();
+        digiTuneNode = null;
+    }
+    send({ cmd: 'setPTT', value: false });
+    if (!micEnabled) send({ cmd: 'enableMic', value: false });
+    var btn = document.getElementById('digiTuneBtn');
+    if (btn) btn.classList.remove('active');
+    updateDigiStatus('', '');
+    console.log('[DIGI] Tune stopped');
+}
+
+function startDigiTune() {
+    var txCtx = digiTxCtx;
+    if (!txCtx || txCtx.state === 'closed') {
+        console.warn('[DIGI] Tune: AudioContext not ready');
+        return;
+    }
+    var df = (digiTxFreq >= 200 && digiTxFreq <= 3000) ? digiTxFreq : 1000;
+    var actualRate = txCtx.sampleRate;
+    digiTuneActive = true;
+    var btn = document.getElementById('digiTuneBtn');
+    if (btn) btn.classList.add('active');
+    updateDigiStatus('TUNE', 'tx');
+
+    send({ cmd: 'enableMic', value: true });
+
+    var seq = digiTxSeq;
+    var chunksSent = 0;
+    var PTT_AFTER_CHUNKS = 9;
+
+    function sendTuneChunk(i16buf) {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !digiTuneActive) return;
+        if (digiTxGain < 1.0) {
+            var samples = new Int16Array(i16buf);
+            for (var g = 0; g < samples.length; g++) samples[g] = (samples[g] * digiTxGain) | 0;
+            i16buf = samples.buffer;
+        }
+        var frame = new ArrayBuffer(6 + i16buf.byteLength);
+        var dv = new DataView(frame);
+        dv.setUint8(0, 0x03); dv.setUint8(1, 0x00);
+        dv.setUint16(2, (seq++) & 0xFFFF, true);
+        dv.setUint16(4, 0, true);
+        new Uint8Array(frame, 6).set(new Uint8Array(i16buf));
+        ws.send(frame);
+        chunksSent++;
+        if (chunksSent === PTT_AFTER_CHUNKS) {
+            send({ cmd: 'setPTT', value: true });
+        }
+    }
+
+    // AudioWorklet that generates a continuous sine tone and emits Int16 chunks
+    var tuneCode = [
+        'class TuneTone extends AudioWorkletProcessor {',
+        '  constructor(options) {',
+        '    super();',
+        '    this.freq = options.processorOptions.freq;',
+        '    this.rate = options.processorOptions.rate;',
+        '    this.phase = 0;',
+        '    this.running = true;',
+        '    this.acc = [];',
+        '    this.port.onmessage = function(e) {',
+        '      if (e.data === "stop") this.running = false;',
+        '    }.bind(this);',
+        '  }',
+        '  process(inputs, outputs) {',
+        '    if (!this.running) return false;',
+        '    var QUANTUM = 128;',
+        '    var BATCH = 512;',
+        '    var out = outputs[0] && outputs[0][0];',
+        '    var dp = 2 * Math.PI * this.freq / this.rate;',
+        '    for (var i = 0; i < QUANTUM; i++) {',
+        '      var s = Math.sin(this.phase) * 0.9;',
+        '      if (out) out[i] = s;',
+        '      this.acc.push(s);',
+        '      this.phase += dp;',
+        '    }',
+        '    if (this.phase > 2 * Math.PI * 1e6) this.phase -= 2 * Math.PI * 1e6;',
+        '    if (this.acc.length >= BATCH) {',
+        '      var i16 = new Int16Array(this.acc.length);',
+        '      for (var k = 0; k < this.acc.length; k++) {',
+        '        i16[k] = (this.acc[k] * 32767) | 0;',
+        '      }',
+        '      this.port.postMessage(i16.buffer, [i16.buffer]);',
+        '      this.acc = [];',
+        '    }',
+        '    return true;',
+        '  }',
+        '}',
+        'registerProcessor("tune-tone", TuneTone);'
+    ].join('\n');
+
+    function startTuneNode() {
+        var node = new AudioWorkletNode(txCtx, 'tune-tone', {
+            outputChannelCount: [1],
+            processorOptions: { freq: df, rate: actualRate }
+        });
+        var sink = txCtx.createAnalyser();
+        node.connect(sink);
+        node.port.onmessage = function(e) {
+            if (!digiTuneActive) {
+                node.disconnect();
+                return;
+            }
+            sendTuneChunk(e.data);
+        };
+        digiTuneNode = node;
+        console.log('[DIGI] Tune started: ' + df + ' Hz');
+    }
+
+    var blob = new Blob([tuneCode], { type: 'application/javascript' });
+    var blobUrl = URL.createObjectURL(blob);
+    txCtx.audioWorklet.addModule(blobUrl).then(function() {
+        URL.revokeObjectURL(blobUrl);
+        startTuneNode();
+    }).catch(function(err) {
+        URL.revokeObjectURL(blobUrl);
+        console.error('[DIGI] Tune worklet failed:', err);
+        stopDigiTune();
+    });
+}
+
 function streamDigiAudio(samples12k, onDone, onFirstChunk) {
     console.log('[DIGI stream] start: samples12k.length=' + samples12k.length +
                 ' audioSampleRate=' + audioSampleRate +
@@ -6110,12 +6266,9 @@ function streamDigiAudio(samples12k, onDone, onFirstChunk) {
                          (ws ? ws.readyState : 'null') + ') chunk#' + (chunksSent + 1));
             return;
         }
-        // Apply ALC-controlled gain reduction
         if (digiTxGain < 1.0) {
             var samples = new Int16Array(i16buf);
-            for (var g = 0; g < samples.length; g++) {
-                samples[g] = (samples[g] * digiTxGain) | 0;
-            }
+            for (var g = 0; g < samples.length; g++) samples[g] = (samples[g] * digiTxGain) | 0;
             i16buf = samples.buffer;
         }
         var frame = new ArrayBuffer(6 + i16buf.byteLength);
@@ -6799,10 +6952,24 @@ function initDigiHandlers() {
             digiOurReport = '';
             var etb = document.getElementById('digiEnableTxBtn');
             if (etb) etb.classList.remove('active');
+            stopDigiTune();
             send({ cmd: 'setPTT', value: false });
             updateDigiStatus('HALT', '');
             updateDigiMsgRows();
             drawDigiWaterfall();
+        });
+    }
+
+    // Tune button — continuous tone at digiTxFreq
+    var tuneBtn = document.getElementById('digiTuneBtn');
+    if (tuneBtn) {
+        tuneBtn.addEventListener('click', function() {
+            initDigiTxCtx();
+            if (digiTuneActive) {
+                stopDigiTune();
+            } else {
+                startDigiTune();
+            }
         });
     }
 
