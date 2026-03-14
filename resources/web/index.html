@@ -5903,15 +5903,17 @@ function executeDigiTx(slotPhase) {
         updateDigiStatus('TX', 'tx');
         send({ cmd: 'enableMic', value: true });
 
-        // Local TX monitor: play the generated audio through browser speakers.
-        // Reuse digiTxCtx (created on user gesture) to satisfy autoplay policy.
+        // Local TX monitor: play the generated audio through browser speakers at reduced volume.
         try {
             if (digiTxCtx && digiTxCtx.state === 'running') {
                 var monBuf = digiTxCtx.createBuffer(1, samples12k.length, 12000);
                 monBuf.copyToChannel(samples12k, 0);
                 digiMonitorSrc = digiTxCtx.createBufferSource();
                 digiMonitorSrc.buffer = monBuf;
-                digiMonitorSrc.connect(digiTxCtx.destination);
+                var monGain = digiTxCtx.createGain();
+                monGain.gain.value = 0.025;
+                digiMonitorSrc.connect(monGain);
+                monGain.connect(digiTxCtx.destination);
                 digiMonitorSrc.onended = function() { digiMonitorSrc = null; };
                 digiMonitorSrc.start();
             }
