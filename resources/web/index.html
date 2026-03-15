@@ -834,6 +834,7 @@ body.digi-open .digi-bar {
     border-bottom: 1px solid #024;
     flex-shrink: 0;
 }
+.digi-mobile-break { display: none; }
 .digi-progress-wrap {
     flex: 1;
     height: 8px;
@@ -1604,6 +1605,7 @@ body.digi-open .digi-bar {
     background: #1a1a1a;
     border-color: #600;
     color: #a44;
+    touch-action: none;
 }
 .softBtn.ptt-btn.tx-active {
     background: #800;
@@ -1746,6 +1748,11 @@ body.digi-open .digi-bar {
     /* All Decodes panel: keep SNR, hide dt and Hz */
     #digiRxPanel .digi-decode-dt,
     #digiRxPanel .digi-decode-freq { display: none; }
+    /* Status bar: wrap after clock, DX+buttons on row 2 */
+    .digi-status-bar { flex-wrap: wrap; }
+    .digi-mobile-break { flex-basis: 100%; height: 0; }
+    .digi-status-bar .digi-callsign-input { flex: 1 1 40px; width: auto; min-width: 40px; }
+    .digi-enable-tx-btn, .digi-halt-btn, .digi-tune-btn { font-size: 10px; padding: 2px 5px; flex-shrink: 0; }
 }
 </style>
 </head>
@@ -1891,6 +1898,7 @@ body.digi-open .digi-bar {
                     <div id="digiProgressBar" class="digi-progress-fill"></div>
                 </div>
                 <span id="digiClock" class="digi-period-clock">15</span>
+                <span class="digi-mobile-break"></span>
                 <span class="digi-field-label">DX:</span>
                 <input type="text" id="digiDxCall" class="digi-callsign-input" maxlength="10" placeholder="DX" autocomplete="off">
                 <button id="digiEnableTxBtn" class="digi-enable-tx-btn">Enable TX</button>
@@ -3576,27 +3584,36 @@ function releasePTT() {
     }, 300);
 }
 
+// PTT: pointer events (unified touch+mouse) with document-level release.
+// renderBottomBar() destroys the button DOM mid-press; document-level pointerup
+// always fires regardless. touch-action:none on .ptt-btn prevents browser
+// from stealing the touch for scrolling.
 (function() {
     var bar = document.getElementById('bottomBar');
-    function isPTT(e) { return e.target.classList.contains('ptt-btn'); }
+    var pttPointerActive = false;
+    function isPTT(e) { return e.target && e.target.classList && e.target.classList.contains('ptt-btn'); }
     function pttOn(e) {
         e.preventDefault();
-        if (!handlePTTPress()) return; // Check audio/mic, show menu if needed
-        // Cancel any pending PTT release
+        if (!handlePTTPress()) return;
         if (pttReleaseTimer) {
             clearTimeout(pttReleaseTimer);
             pttReleaseTimer = null;
         }
+        pttPointerActive = true;
         flushAudio();
         send({ cmd: 'setPTT', value: true });
     }
-    function pttOff(e) { e.preventDefault(); releasePTT(); }
-    bar.addEventListener('mousedown', function(e) { if (isPTT(e)) pttOn(e); });
-    bar.addEventListener('mouseup', function(e) { if (isPTT(e)) pttOff(e); });
-    bar.addEventListener('mouseleave', function() { if (isTransmitting) releasePTT(); });
-    bar.addEventListener('touchstart', function(e) { if (isPTT(e)) pttOn(e); });
-    bar.addEventListener('touchend', function(e) { if (isPTT(e)) pttOff(e); });
-    bar.addEventListener('touchcancel', function() { if (isTransmitting) releasePTT(); });
+    // Press: detected on bar via delegation
+    bar.addEventListener('pointerdown', function(e) {
+        if (isPTT(e)) pttOn(e);
+    });
+    // Release: on document so it fires even if button DOM was recreated
+    document.addEventListener('pointerup', function() {
+        if (pttPointerActive) { pttPointerActive = false; releasePTT(); }
+    });
+    document.addEventListener('pointercancel', function() {
+        if (pttPointerActive) { pttPointerActive = false; releasePTT(); }
+    });
 })();
 
 // ============================================================
