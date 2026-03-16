@@ -139,7 +139,6 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
-          modules: 'qtwebsockets qtmultimedia qtserialport'
 
       - name: Install vcpkg packages
         run: vcpkg install eigen3:x64-windows opus:x64-windows portaudio:x64-windows hidapi:x64-windows openssl:x64-windows
