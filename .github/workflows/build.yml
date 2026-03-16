@@ -46,12 +46,12 @@ jobs:
 
       - name: Build
         run: |
-          qmake wfview.pro
+          qmake wfweb.pro
           make -j$(nproc)
 
       - name: Get version
         id: version
-        run: echo "version=$(grep 'WFVIEW_VERSION' wfview.pro | grep -oP '[\d.]+')" >> $GITHUB_OUTPUT
+        run: echo "version=$(grep 'WFVIEW_VERSION' wfweb.pro | grep -oP '[\d.]+')" >> $GITHUB_OUTPUT
 
       - name: Package tarball
         run: |

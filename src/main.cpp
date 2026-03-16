@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
         .arg(QSysInfo::prettyProductName()).arg(QSysInfo::buildCpuArchitecture())
         .arg(QT_VERSION_STR).arg(qVersion());
 
-    // Translator doesn't really make sense for wfserver right now.
+    // Translator doesn't really make sense for wfweb right now.
     QTranslator myappTranslator;
     qDebug() << "Current translation language: " << myappTranslator.language();
 
