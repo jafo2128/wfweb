@@ -301,24 +301,16 @@ void servermain::receiveRigCaps(rigCapabilities* rigCaps)
     // Signal may come from rigCommander or cachingQueue
     rigCommander* sender = qobject_cast<rigCommander*>(QObject::sender());
 
-    qInfo(logSystem()) << "receiveRigCaps called, sender:" << QObject::sender() << "rigCommander cast:" << sender << "rigCaps:" << rigCaps;
-
     // Use the GUID to determine which radio the response is from
     for (RIGCONFIG* radio : serverConfig.rigs)
     {
         bool guidMatch = (sender != Q_NULLPTR && radio->rig != Q_NULLPTR && !memcmp(sender->getGUID(), radio->guid, GUIDLEN));
         bool fromQueue = (sender == Q_NULLPTR); // Signal came from cachingQueue
 
-        qInfo(logSystem()) << "  radio:" << radio->rigName << "guidMatch:" << guidMatch << "fromQueue:" << fromQueue
-                           << "rigAvailable:" << radio->rigAvailable << "rig:" << radio->rig;
-
-#ifdef Q_OS_WIN
-        if ((guidMatch || fromQueue) && radio->rig != Q_NULLPTR)
-#else
         if ((guidMatch || fromQueue) && radio->rig != Q_NULLPTR && !radio->rigAvailable)
-#endif
         {
-            qInfo(logSystem()) << "  -> MATCHED, setting up polling";
+            // Set rigAvailable immediately to prevent re-entry from rigServer race
+            radio->rigAvailable = true;
 
             qDebug(logSystem()) << "Rig name: " << rigCaps->modelName;
             qDebug(logSystem()) << "Has LAN capabilities: " << rigCaps->hasLan;
@@ -345,7 +337,6 @@ void servermain::receiveRigCaps(rigCapabilities* rigCaps)
                 .arg(rigCaps->guid[15], 2, 16, QLatin1Char('0'))
                 ;
             radio->rigCaps = rigCaps;
-            radio->rigAvailable = true;
 
             // Calculate queue interval based on baud rate, same as wfview
             {
@@ -419,8 +410,8 @@ void servermain::receiveRigCaps(rigCapabilities* rigCaps)
 
                 // Spectrum scope
                 if (rigCaps->hasSpectrum) {
-                    queue->add(priorityHigh, queueItem(funcScopeOnOff, QVariant::fromValue(quint8(1)), true));
-                    queue->add(priorityHigh, queueItem(funcScopeDataOutput, QVariant::fromValue(quint8(1)), false));
+                    queue->addUnique(priorityHigh, queueItem(funcScopeOnOff, QVariant::fromValue(quint8(1)), true));
+                    queue->addUnique(priorityHigh, queueItem(funcScopeDataOutput, QVariant::fromValue(quint8(1)), false));
                 }
 
                 qInfo(logSystem()) << "Web server polling commands configured for" << rigCaps->modelName;

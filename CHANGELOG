@@ -6,6 +6,30 @@ a built-in web interface. See https://gitlab.com/eliggett/wfview for the
 upstream wfview history.
 
 
+v0.3.0 (2026-03-16)
+--------------------
+
+Windows:
+- Windows build support via vcpkg (opus, portaudio, hidapi, openssl,
+  eigen3, qcustomplot); build.bat script for local builds
+- SSL certificate generation via OpenSSL C API on Windows (no openssl
+  CLI dependency)
+- USB audio capture on Windows with poll timer and COM initialization
+- GitHub Actions CI: Windows build job with vcpkg caching and ZIP
+  artifact upload
+- BUILDING-WINDOWS.md build instructions
+
+Fixes:
+- Fix intermittent slow S-meter and delayed frequency changes: a signal
+  delivery race between rigServer and servermain meant the polling setup
+  block was sometimes skipped entirely on startup (no auto-information,
+  no recurring polls, no queue interval recalculation); fix by setting
+  rigAvailable immediately on entry to prevent the race
+- Fix queue flooding from stale-cache re-requests: remove SWR
+  always-re-request special case in getCache() and use addUnique()
+  instead of add() to prevent duplicate immediate commands piling up
+
+
 v0.2.6 (2026-03-16)
 --------------------
 
