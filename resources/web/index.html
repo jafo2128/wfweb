@@ -5645,6 +5645,7 @@ function escapeHtml(s) {
 }
 
 function digiRowClick(el) {
+    if (!checkDigiCallGrid()) return;
     var msg = decodeURIComponent(el.getAttribute('data-msg') || '');
     var slotIndex = parseInt(el.getAttribute('data-slot') || '-1', 10);
     var freq = parseInt(el.getAttribute('data-freq') || '0', 10);
@@ -5725,6 +5726,7 @@ function digiRowClick(el) {
 
 // Double-click on a DECODE row (All Decodes / Directed): run click logic then enable TX + arm.
 function digiRowDblClick(el) {
+    if (!checkDigiCallGrid()) return;
     // If a transmission is already in progress, abort it transparently so the
     // new selection takes over immediately (same slot if phase allows).
     if (digiTxActive) {
@@ -6046,6 +6048,8 @@ function executeDigiTx(slotPhase) {
 
     if (!digiTxEnabled) { console.warn('[DIGI TX] TX not enabled — skipping'); return; }
     if (digiTxActive) { console.warn('[DIGI TX] TX already active — skipping (will retry next slot)'); return; }
+    // Safety net: never transmit if MY CALL or MY GRID are not set
+    if (!getMyCall() || !getMyGrid()) { console.warn('[DIGI TX] MY CALL or GRID not set — aborting TX'); digiTxArmed = false; return; }
     var lib = window.ft8tsLib;
     if (!lib) { console.warn('[DIGI TX] ft8tsLib not loaded — skipping'); return; }
     var msg = digiTxQueued;
@@ -6735,6 +6739,7 @@ function downloadAdif() {
     var lines = ['ADIF Export from wfweb\n<EOH>\n'];
     for (var i = qsoLog.length - 1; i >= 0; i--) {
         var q = qsoLog[i];
+        if (!q.call) continue;
         var freqMHz = q.freq ? (q.freq / 1e6).toFixed(6) : '';
         lines.push(
             adifField('CALL', q.call) +
@@ -6762,14 +6767,30 @@ function downloadAdif() {
     URL.revokeObjectURL(a.href);
 }
 
+var clearLogConfirmTimer = null;
 function clearDigiLog() {
-    if (!qsoLog.length) { alert('Log is already empty.'); return; }
-    if (confirm('Download the log as ADIF before clearing?')) { downloadAdif(); }
-    if (confirm('Clear all ' + qsoLog.length + ' logged QSO(s)?')) {
-        qsoLog = [];
-        try { localStorage.removeItem('qsoLog'); } catch(e) {}
-        renderDigiLog();
+    var btn = document.getElementById('digiClearLogBtn');
+    if (!qsoLog.length) {
+        if (btn) { btn.textContent = 'Log is empty'; setTimeout(function() { btn.textContent = '\u2715 Clear Log'; }, 1500); }
+        return;
     }
+    // First click: ask for confirmation by changing button text
+    if (!clearLogConfirmTimer) {
+        if (btn) btn.textContent = 'Confirm Clear? (' + qsoLog.length + ' QSOs)';
+        clearLogConfirmTimer = setTimeout(function() {
+            clearLogConfirmTimer = null;
+            if (btn) btn.textContent = '\u2715 Clear Log';
+        }, 4000);
+        return;
+    }
+    // Second click: confirmed — download ADIF then clear
+    clearTimeout(clearLogConfirmTimer);
+    clearLogConfirmTimer = null;
+    downloadAdif();
+    qsoLog = [];
+    try { localStorage.removeItem('qsoLog'); } catch(e) {}
+    renderDigiLog();
+    if (btn) btn.textContent = '\u2715 Clear Log';
 }
 
 function initDigiHandlers() {
