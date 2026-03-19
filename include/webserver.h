@@ -32,6 +32,10 @@
 #include "cachingqueue.h"
 #include "audioconverter.h"
 
+#ifdef Q_OS_MACOS
+class TlsProxyWorker;
+#endif
+
 // SSL-enabled TCP server for HTTPS
 class SslTcpServer : public QTcpServer {
 public:
@@ -142,6 +146,15 @@ private:
     bool sslEnabled = false;
     QSslCertificate sslCert;
     QSslKey sslKey;
+#ifdef Q_OS_MACOS
+    QString sslCertPath;
+    QString sslKeyPath;
+    // OpenSSL TLS proxy (bypasses Secure Transport CertificateRequest issue)
+    bool useOpenSslProxy = false;
+    TlsProxyWorker *tlsProxyWorker = nullptr;
+    QThread *tlsProxyThread = nullptr;
+    quint16 internalHttpPort = 0;
+#endif
 
     // Audio streaming (LAN: converter-based, USB: direct capture)
     audioConverter *rxConverter = nullptr;

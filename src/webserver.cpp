@@ -11,11 +11,18 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <objbase.h>
+#endif
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 #include <openssl/bn.h>
+#endif
+
+#ifdef Q_OS_MACOS
+#include "tlsproxy.h"
 #endif
 
 webServer::webServer(QObject *parent) :
@@ -58,6 +65,15 @@ webServer::~webServer()
         rxConverterThread->quit();
         rxConverterThread->wait();
     }
+#ifdef Q_OS_MACOS
+    if (tlsProxyWorker) {
+        tlsProxyWorker->stop();
+    }
+    if (tlsProxyThread) {
+        tlsProxyThread->quit();
+        tlsProxyThread->wait();
+    }
+#endif
     if (wsServer) {
         wsServer->close();
     }
@@ -73,7 +89,7 @@ webServer::~webServer()
 }
 
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
 // Generate a self-signed PEM certificate and key using the OpenSSL C API.
 // Returns true on success, writing PEM files to certPath and keyPath.
 static bool generateSelfSignedCert(const QString &certPath, const QString &keyPath)
@@ -137,7 +153,7 @@ cleanup:
     if (bn) BN_free(bn);
     return ok;
 }
-#endif
+#endif // Q_OS_WIN || Q_OS_MACOS
 
 bool webServer::setupSsl()
 {
@@ -154,8 +170,9 @@ bool webServer::setupSsl()
     // Generate self-signed cert if not present
     if (!QFile::exists(certPath) || !QFile::exists(keyPath)) {
         qInfo() << "Web: Generating self-signed SSL certificate...";
-#ifdef Q_OS_WIN
-        // Use OpenSSL C API directly (openssl CLI not available on Windows)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        // Use OpenSSL C API directly (openssl CLI not available on Windows,
+        // avoids Secure Transport issues on macOS)
         if (!generateSelfSignedCert(certPath, keyPath)) {
             qWarning() << "Web: Failed to generate SSL certificate via OpenSSL API";
             return false;
@@ -175,7 +192,20 @@ bool webServer::setupSsl()
         qInfo() << "Web: SSL certificate generated at" << certPath;
     }
 
-    // Load certificate
+#ifdef Q_OS_MACOS
+    sslCertPath = certPath;
+    sslKeyPath = keyPath;
+    // On macOS, Qt5 uses Secure Transport which always sends CertificateRequest
+    // to clients, causing Safari to prompt for a client certificate.
+    // Use an OpenSSL-based TLS proxy instead.
+    if (!QSslSocket::sslLibraryVersionString().contains("OpenSSL")) {
+        useOpenSslProxy = true;
+        qInfo() << "Web: Will use OpenSSL TLS proxy (Secure Transport workaround)";
+        return true;
+    }
+#endif
+
+    // Load certificate into Qt types (non-proxy path)
     QFile certFile(certPath);
     if (!certFile.open(QIODevice::ReadOnly)) {
         qWarning() << "Web: Cannot read SSL certificate";
@@ -217,21 +247,47 @@ void webServer::init(quint16 httpPort, quint16 wsPort)
     sslEnabled = setupSsl();
 
     if (sslEnabled) {
-        // HTTPS + WSS on a single port
-        SslTcpServer *sslServer = new SslTcpServer(this);
-        sslServer->cert = sslCert;
-        sslServer->key = sslKey;
-        httpServer = sslServer;
+#ifdef Q_OS_MACOS
+        if (useOpenSslProxy) {
+            // macOS: plain HTTP server on localhost, TLS proxy on the real port
+            httpServer = new QTcpServer(this);
+            if (httpServer->listen(QHostAddress::LocalHost, 0)) {
+                internalHttpPort = httpServer->serverPort();
+                qInfo() << "Web: Internal HTTP server on localhost:" << internalHttpPort;
+                connect(httpServer, &QTcpServer::newConnection, this, &webServer::onHttpConnection);
+            } else {
+                qWarning() << "Web: Internal HTTP server failed to listen";
+            }
 
-        if (httpServer->listen(QHostAddress::Any, httpPort)) {
-            qInfo() << "Web HTTPS server listening on port" << httpPort;
-            connect(httpServer, &QTcpServer::newConnection, this, &webServer::onHttpConnection);
-        } else {
-            qWarning() << "Web HTTPS server failed to listen on port" << httpPort;
+            // Start OpenSSL TLS proxy in its own thread
+            tlsProxyWorker = new TlsProxyWorker(httpPort, internalHttpPort, sslCertPath, sslKeyPath);
+            tlsProxyThread = new QThread(this);
+            tlsProxyThread->setObjectName("TlsProxy");
+            tlsProxyWorker->moveToThread(tlsProxyThread);
+            connect(tlsProxyThread, &QThread::started, tlsProxyWorker, &TlsProxyWorker::start);
+            connect(tlsProxyThread, &QThread::finished, tlsProxyWorker, &QObject::deleteLater);
+            connect(tlsProxyWorker, &TlsProxyWorker::error, this, [](const QString &msg) {
+                qWarning() << "Web: TLS proxy error:" << msg;
+            });
+            tlsProxyThread->start();
+        } else
+#endif
+        {
+            // HTTPS + WSS on a single port (Linux/Windows: QSslSocket with OpenSSL backend)
+            SslTcpServer *sslServer = new SslTcpServer(this);
+            sslServer->cert = sslCert;
+            sslServer->key = sslKey;
+            httpServer = sslServer;
+
+            if (httpServer->listen(QHostAddress::Any, httpPort)) {
+                qInfo() << "Web HTTPS server listening on port" << httpPort;
+                connect(httpServer, &QTcpServer::newConnection, this, &webServer::onHttpConnection);
+            } else {
+                qWarning() << "Web HTTPS server failed to listen on port" << httpPort;
+            }
         }
 
-        // WebSocket server in NonSecureMode (SSL handled by SslTcpServer)
-        // Does NOT listen on its own port — connections handed off via handleConnection
+        // WebSocket server in NonSecureMode (SSL handled by SslTcpServer or TLS proxy)
         wsServer = new QWebSocketServer(QStringLiteral("wfview Web"), QWebSocketServer::NonSecureMode, this);
         connect(wsServer, &QWebSocketServer::newConnection, this, &webServer::onWsNewConnection);
 
@@ -343,8 +399,13 @@ void webServer::onHttpReadyRead()
     QTcpSocket *socket = qobject_cast<QTcpSocket *>(sender());
     if (!socket) return;
 
-    // WebSocket upgrade only applies to SSL sockets (plain HTTP connections go straight to REST/static)
-    if (qobject_cast<QSslSocket *>(socket)) {
+    // WebSocket upgrade applies to SSL sockets or connections through the TLS proxy
+    bool isSslConnection = qobject_cast<QSslSocket *>(socket);
+#ifdef Q_OS_MACOS
+    if (!isSslConnection && useOpenSslProxy)
+        isSslConnection = (socket->localPort() == internalHttpPort);
+#endif
+    if (isSslConnection) {
         QByteArray peek = socket->peek(4096);
         if (peek.contains("Upgrade: websocket") || peek.contains("Upgrade: WebSocket")) {
             disconnect(socket, &QTcpSocket::readyRead, this, &webServer::onHttpReadyRead);

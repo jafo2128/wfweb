@@ -12,6 +12,7 @@ TARGET = wfweb
 TEMPLATE = app
 
 CONFIG += console
+macx:CONFIG -= app_bundle
 win32:CONFIG += c++17
 
 DEFINES += WFVIEW_VERSION=\\\"0.3.0\\\"
@@ -135,17 +136,17 @@ equals(QT_ARCH, x86_64): DEFINES += EIGEN_VECTORIZE_SSE3
 
 DEFINES += PREFIX=\\\"$$PREFIX\\\"
 
-macx:INCLUDEPATH += /usr/local/include /opt/local/include
-macx:LIBS += -L/usr/local/lib -L/opt/local/lib
+macx:INCLUDEPATH += /usr/local/include /opt/local/include /opt/homebrew/include
+macx:LIBS += -L/usr/local/lib -L/opt/local/lib -L/opt/homebrew/lib
 
-macx:ICON = ../wfview/resources/wfview.icns
+macx:ICON = resources/wfview.icns
 win32:RC_ICONS = "resources/icons/Windows/wfview 512x512.ico"
 QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
 QMAKE_TARGET_BUNDLE_PREFIX = org.wfview
 MY_ENTITLEMENTS.name = CODE_SIGN_ENTITLEMENTS
-MY_ENTITLEMENTS.value = ../wfview/resources/wfview.entitlements
+MY_ENTITLEMENTS.value = resources/wfview.entitlements
 QMAKE_MAC_XCODE_SETTINGS += MY_ENTITLEMENTS
-QMAKE_INFO_PLIST = ../wfview/resources/Info.plist
+QMAKE_INFO_PLIST = resources/Info.plist
 
 macx{
     rigFiles.files = rigs
@@ -178,7 +179,7 @@ unix:systemd.path = $$PREFIX/lib/systemd/system
 INSTALLS += systemd
 
 linux:LIBS += -L./ -lopus
-macx:LIBS += -framework CoreAudio -framework CoreFoundation -lpthread -lopus 
+macx:LIBS += -framework CoreAudio -framework CoreFoundation -lpthread -lopus -lssl -lcrypto
 
 contains(DEFINES,FTDI_SUPPORT){
   win32:INCLUDEPATH += ../LibFT4222-v1.4.7\imports\LibFT4222\inc
@@ -252,6 +253,8 @@ SOURCES += \
     src/rtpaudio.cpp \
     src/webserver.cpp
 
+macx:SOURCES += src/tlsproxy.cpp
+
 
 HEADERS  += \
     include/servermain.h \
@@ -310,3 +313,5 @@ HEADERS  += \
     include/yaesuudpcontrol.h \
     include/yaesuudpscope.h \
     include/webserver.h
+
+macx:HEADERS += include/tlsproxy.h
