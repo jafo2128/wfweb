@@ -6,6 +6,21 @@ a built-in web interface. See https://gitlab.com/eliggett/wfview for the
 upstream wfview history.
 
 
+v0.3.1 (2026-03-19)
+--------------------
+
+DIGI panel (FT8/FT4):
+- Fix violent TX power fluctuations caused by ALC feedback oscillation:
+  replace bang-bang gain controller with smooth proportional control using
+  EMA-filtered ALC readings, dead zone, and asymmetric gain adjustment
+- Start TX audio at 25% gain (was 100%) to avoid overdriving the rig ALC
+  on first transmission; learned gain persists across TX cycles
+- ALC indicator turns red only above 5% (was tied to control target)
+
+Infrastructure:
+- Include Windows build job in the GitHub Actions release pipeline
+
+
 v0.3.0 (2026-03-16)
 --------------------
 
