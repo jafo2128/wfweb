@@ -370,7 +370,7 @@ int audioDevices::findInput(QString type, QString name, bool ignoreDefault)
     for (int f = 0; f < inputs.size(); f++)
     {
         //qInfo(logAudio()) << "Found device" << inputs[f].name;
-        if (!name.isEmpty() && inputs[f]->name.startsWith(name)) {
+        if (!name.isEmpty() && name != "default" && inputs[f]->name.startsWith(name)) {
             s << type << " Audio input device " << name << " found! ";
             ret = f;
         }
@@ -388,24 +388,30 @@ int audioDevices::findInput(QString type, QString name, bool ignoreDefault)
  
     if (ret == -1 && !ignoreDefault)
     {
-        s << type << " Audio input device " << name << " Not found: ";
-
-        if (inputs.size() == 1) {
-            s << "Selecting first device " << inputs[0]->name;
-            ret = 0;
-        }
-        else if (usb > -1 && type != "Client")
-        {
-            s << " Selecting found USB device " << inputs[usb]->name;
-            ret = usb;
-        }
-        else if (def > -1)
-        {
-            s << " Selecting default device " << inputs[def]->name;
+        if (name == "default" && def > -1) {
+            s << type << " Audio input: using system default device " << inputs[def]->name;
             ret = def;
         }
         else {
-            s << " and no default device found, aborting!";
+            s << type << " Audio input device " << name << " Not found: ";
+
+            if (inputs.size() == 1) {
+                s << "Selecting first device " << inputs[0]->name;
+                ret = 0;
+            }
+            else if (usb > -1 && type != "Client")
+            {
+                s << " Selecting found USB device " << inputs[usb]->name;
+                ret = usb;
+            }
+            else if (def > -1)
+            {
+                s << " Selecting default device " << inputs[def]->name;
+                ret = def;
+            }
+            else {
+                s << " and no default device found, aborting!";
+            }
         }
     } else if (ret == -1 && ignoreDefault)
     {
@@ -432,7 +438,7 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
     for (int f = 0; f < outputs.size(); f++)
     {
         //qInfo(logAudio()) << "Found device" << outputs[f].name;
-        if (!name.isEmpty() && outputs[f]->name.startsWith(name)) {
+        if (!name.isEmpty() && name != "default" && outputs[f]->name.startsWith(name)) {
             ret = f;
             s << type << " Audio output device " << name << " found! ";
         }
@@ -451,24 +457,30 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
 
     if (ret == -1 && !ignoreDefault)
     {
-        s << type << " Audio output device " << name << " Not found: ";
-
-        if (outputs.size() == 1) {
-            s << " Selecting first device " << outputs[0]->name;
-            ret = 0;
-        }
-        else if (usb > -1 && type != "Client")
-        {
-            s << " Selecting found USB device " << outputs[usb]->name;
-            ret = usb;
-        }
-        else if (def > -1)
-        {
-            s << " Selecting default device " << outputs[def]->name;
+        if (name == "default" && def > -1) {
+            s << type << " Audio output: using system default device " << outputs[def]->name;
             ret = def;
         }
         else {
-            s << " and no default device found, aborting!";
+            s << type << " Audio output device " << name << " Not found: ";
+
+            if (outputs.size() == 1) {
+                s << " Selecting first device " << outputs[0]->name;
+                ret = 0;
+            }
+            else if (usb > -1 && type != "Client")
+            {
+                s << " Selecting found USB device " << outputs[usb]->name;
+                ret = usb;
+            }
+            else if (def > -1)
+            {
+                s << " Selecting default device " << outputs[def]->name;
+                ret = def;
+            }
+            else {
+                s << " and no default device found, aborting!";
+            }
         }
     } else if (ret == -1 && ignoreDefault)
     {

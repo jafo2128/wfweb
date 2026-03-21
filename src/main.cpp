@@ -153,6 +153,7 @@ int main(int argc, char *argv[])
         "  --civ <addr>            CI-V address (decimal, e.g. 148 for IC-7300)\n"
         "  --serial-port <path>    Serial port device (e.g. /dev/ttyUSB0)\n"
         "  --audio-system <id>     Audio system (0=Qt, 1=PortAudio, 2=RtAudio)\n"
+        "  --audio-device <name>   Audio device name (e.g. 'USB Audio CODEC')\n"
         "  --manufacturer <id>     Manufacturer ID (0=Icom, 1=Kenwood, 2=Yaesu)\n"
         "  -l --logfile <file>     Log file\n"
         "  -b --background         Run as daemon (not Windows)\n"
@@ -331,6 +332,11 @@ int main(int argc, char *argv[])
         {
             if (argc > c + 1) { overrides.audioSystem = QString(argv[++c]).toInt(); }
             else { std::cout << "Error: --audio-system requires ID (0=Qt, 1=PortAudio, 2=RtAudio)\n"; return -1; }
+        }
+        else if (currentArg == "--audio-device")
+        {
+            if (argc > c + 1) { overrides.audioDevice = argv[++c]; }
+            else { std::cout << "Error: --audio-device requires device name (e.g. 'USB Audio CODEC')\n"; return -1; }
         }
         else if (currentArg == "--manufacturer")
         {

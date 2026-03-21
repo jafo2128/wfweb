@@ -137,14 +137,38 @@ If the remote radio or server uses non-default ports:
 
 ---
 
+## Rig Server Mode (`--no-web`)
+
+Use `--no-web` to disable the web interface and enable the Icom UDP rig server
+instead. This lets other wfview instances (or compatible clients) connect to the
+radio over the network.
+
+The rig server uses **UDP** ports — you must add `/udp` to the Docker port
+mappings:
+
+```bash
+docker run --rm -it \
+  --device /dev/ttyUSB0 \
+  --device /dev/snd --group-add audio \
+  -p 50001:50001/udp -p 50002:50002/udp -p 50003:50003/udp \
+  k1fm/wfweb:latest --serial-port /dev/ttyUSB0 --no-web
+```
+
+> **Note:** `-p 50001:50001` (without `/udp`) only maps TCP, which will not work.
+
+---
+
 ## Ports
 
-| Port | Protocol  | Purpose                              |
-|------|-----------|--------------------------------------|
-| 8080 | HTTPS     | Web interface and WebSocket          |
-| 8081 | HTTP      | Plain HTTP REST API (scripts, microcontrollers) |
+| Port  | Protocol  | Purpose                              |
+|-------|-----------|--------------------------------------|
+| 8080  | TCP/HTTPS | Web interface and WebSocket          |
+| 8081  | TCP/HTTP  | Plain HTTP REST API (scripts, microcontrollers) |
+| 50001 | UDP       | Rig server control (--no-web mode)   |
+| 50002 | UDP       | Rig server CI-V (--no-web mode)      |
+| 50003 | UDP       | Rig server audio (--no-web mode)     |
 
-Both ports must be published (`-p`) for the web interface to work.
+Both web ports must be published (`-p`) for the web interface to work.
 A self-signed TLS certificate is generated automatically on first run.
 
 Override the web server port with `-p` (CLI flag, not Docker's `-p`):

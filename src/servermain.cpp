@@ -896,6 +896,15 @@ void servermain::applyCLIOverrides()
         }
     }
 
+    // Audio device override
+    if (!cliOverrides.audioDevice.isEmpty()) {
+        for (RIGCONFIG* radio : serverConfig.rigs) {
+            radio->rxAudioSetup.name = cliOverrides.audioDevice;
+            radio->txAudioSetup.name = cliOverrides.audioDevice;
+        }
+        qInfo(logSystem()) << "Audio device overridden via CLI:" << cliOverrides.audioDevice;
+    }
+
     // Serial port override
     if (!cliOverrides.usbPort.isEmpty()) {
         for (RIGCONFIG* radio : serverConfig.rigs) {

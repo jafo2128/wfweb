@@ -58,6 +58,7 @@ struct cmdLineOverrides {
     int manufacturer = -1;
     int audioSystem = -1; // --audio-system override
     QString usbPort;      // --serial-port override
+    QString audioDevice;  // --audio-device override
 };
 
 class servermain : public QObject
