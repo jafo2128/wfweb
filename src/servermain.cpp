@@ -903,6 +903,12 @@ void servermain::updateAudioDevices()
         int inputNum = audioDev->findInput(rig->rigName, rig->rxAudioSetup.name);
         int outputNum = audioDev->findOutput(rig->rigName, rig->txAudioSetup.name);
 
+        if (inputNum < 0 || outputNum < 0) {
+            qWarning(logAudio()) << "No local audio devices found for" << rig->rigName
+                                 << "- skipping local audio setup (LAN audio unaffected)";
+            continue;
+        }
+
         if (prefs.audioSystem == qtAudio) {
             rig->rxAudioSetup.port = audioDev->getInputDeviceInfo(inputNum);
             rig->txAudioSetup.port = audioDev->getOutputDeviceInfo(outputNum);

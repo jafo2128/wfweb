@@ -199,7 +199,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: [build-linux]
+    needs: [build-linux, build-windows]
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
