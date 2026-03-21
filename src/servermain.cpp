@@ -258,7 +258,7 @@ void servermain::removeRig()
 
 void servermain::receiveStatusUpdate(networkStatus status)
 {
-    if (status.message != lastMessage) {
+    if (status.message != lastMessage && !status.message.contains("rx latency")) {
         std::cout << status.message.toLocal8Bit().toStdString() << "\n";
         lastMessage = status.message;
     }
