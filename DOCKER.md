@@ -1,6 +1,6 @@
-# Running wfview in Docker
+# Running wfweb in Docker
 
-The `k1fm/wfweb` Docker image runs wfview in headless mode with a web interface.
+The `k1fm/wfweb` Docker image runs wfweb in headless mode with a web interface.
 Multi-arch images are published for `linux/amd64` and `linux/arm64`.
 
 ---
@@ -110,7 +110,7 @@ You can override this with `--audio-system`:
 ## LAN Connection
 
 For radios connected via Icom's network protocol (IC-7610, IC-9700, IC-705
-in Wi-Fi mode, or any radio through a wfview server):
+in Wi-Fi mode, or any radio through a wfweb server):
 
 ```bash
 docker run --rm -it \
@@ -140,7 +140,7 @@ If the remote radio or server uses non-default ports:
 ## Rig Server Mode (`--no-web`)
 
 Use `--no-web` to disable the web interface and enable the Icom UDP rig server
-instead. This lets other wfview instances (or compatible clients) connect to the
+instead. This lets other wfweb instances (or compatible clients) connect to the
 radio over the network.
 
 The rig server uses **UDP** ports — you must add `/udp` to the Docker port

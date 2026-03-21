@@ -76,7 +76,7 @@ Replace the IP, username, and password with your radio's settings.
 ./wfweb --lan 192.168.1.100 --civ 152 --lan-user admin --lan-pass secret
 ```
 
-> For other radios, see the [CI-V address table](#other-radios) and [command-line options](#command-line-options) below.
+> For other radios, see the [CI-V address table](#ci-v-address-table) and [command-line options](#command-line-options) below.
 
 ---
 
@@ -236,6 +236,8 @@ SerialPortRadio=auto
 SerialPortBaud=115200
 ```
 
+#### CI-V address table
+
 CI-V addresses are listed in decimal (`RigCIVuInt`). If your radio has been configured with a non-default CI-V address, use that value instead. The default CI-V addresses for each model are:
 
 | Radio | CI-V (hex) | CI-V (decimal) |
@@ -281,6 +283,7 @@ All settings-file parameters can be overridden from the command line. Run `wfweb
 | `--manufacturer <id>` | 0=Icom, 1=Kenwood, 2=Yaesu | `0` (Icom) |
 | `-l --logfile <file>` | Log to file | `/tmp/wfweb-*.log` |
 | `-b --background` | Run as daemon (Linux/macOS) | foreground |
+| `-c --clearconfig CONFIRM` | Reset all saved settings to defaults and exit. If used with `-s`, clears that specific file. | — |
 | `-d --debug` | Enable debug logging | off |
 
 CLI flags override values from the settings file. Passing `--lan` is sufficient to enable LAN mode with default ports; all other LAN flags are optional.
