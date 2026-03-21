@@ -32,6 +32,54 @@ Since wfview is on GitLab and wfweb is on GitHub, GitHub's native fork mechanism
 | Mobile-responsive UI | — | ✓ |
 | Headless / no-display operation | — | ✓ |
 
+## Getting started
+
+Plug in your radio, run one command, open a browser. That's it.
+
+### IC-7300 (USB)
+
+Zero configuration. Connect the radio via USB and run:
+
+```bash
+./wfweb
+```
+
+Open `https://<host>:8080` in your browser. Accept the self-signed certificate warning. You're on the air.
+
+### IC-7300 Mk2 (USB)
+
+The Mk2 uses a different CI-V address. One extra flag:
+
+```bash
+./wfweb --civ 130
+```
+
+### IC-7300 Mk2 (Ethernet)
+
+The Mk2 has a built-in Ethernet port — no USB cable needed:
+
+```bash
+./wfweb --lan 192.168.1.100 --civ 130 --lan-user admin --lan-pass secret -S
+```
+
+Replace the IP, username, and password with your radio's settings. The `-S` flag disables the built-in rig server (not needed when connecting to a radio directly over LAN).
+
+### IC-7610 (USB)
+
+```bash
+./wfweb --civ 152
+```
+
+### IC-7610 (Ethernet)
+
+```bash
+./wfweb --lan 192.168.1.100 --civ 152 --lan-user admin --lan-pass secret -S
+```
+
+> For other radios, see the [CI-V address table](#other-radios) and [command-line options](#command-line-options) below.
+
+---
+
 ## Screenshots
 
 ![SSB mode](ssb.png)
