@@ -24,7 +24,7 @@ RUN qmake wfweb.pro && make -j$(nproc)
 RUN make install INSTALL_ROOT=/install
 
 # Runtime stage
-FROM ubuntu:24.04
+FROM ubuntu:25.10
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -34,9 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libqt5network5t64 libqt5serialport5 libqt5multimedia5 \
     libqt5websockets5 libqt5gamepad5 libqt5printsupport5t64 \
     libopus0 libportaudio2 libpulse0 libhidapi-libusb0 \
-    libudev1 libqcustomplot2.1 librtaudio6 \
+    libudev1 libqcustomplot2.1 \
     && rm -rf /var/lib/apt/lists/*
 
+# The binary links against librtaudio v6 (24.04) but 25.04 ships v7 with an
+# incompatible ABI. Copy the v6 shared library from the builder stage.
+COPY --from=builder /usr/lib/*/librtaudio.so.6* /usr/lib/
+RUN ldconfig
 COPY --from=builder /install/usr/local /usr/local
 
 ENV QT_QPA_PLATFORM=offscreen

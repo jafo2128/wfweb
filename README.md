@@ -287,6 +287,45 @@ CLI flags override values from the settings file. Passing `--lan` is sufficient 
 
 ---
 
+## Docker
+
+A multi-arch Docker image is available for `linux/amd64` and `linux/arm64`.
+
+### Using the pre-built image
+
+```bash
+docker run --rm -it \
+  --device /dev/ttyUSB0 \
+  -p 8080:8080 -p 8081:8081 \
+  k1fm/wfweb:latest
+```
+
+Pass any CLI flags after the image name:
+
+```bash
+docker run --rm -it \
+  --device /dev/ttyUSB0 \
+  -p 8080:8080 -p 8081:8081 \
+  k1fm/wfweb:latest --civ 130
+```
+
+For LAN-connected radios (no USB device needed):
+
+```bash
+docker run --rm -it \
+  -p 8080:8080 -p 8081:8081 \
+  k1fm/wfweb:latest --lan 192.168.1.100 --lan-user admin --lan-pass secret -S
+```
+
+### Building locally
+
+```bash
+docker build -f docker/Dockerfile -t wfweb .
+docker run --rm -it --device /dev/ttyUSB0 -p 8080:8080 -p 8081:8081 wfweb
+```
+
+---
+
 ## Building from source
 
 ### Dependencies
