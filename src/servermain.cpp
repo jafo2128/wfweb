@@ -560,12 +560,7 @@ void servermain::setDefPrefs()
     defPrefs.serialPortBaud = 115200;
     defPrefs.localAFgain = 255;
     defPrefs.tcpPort = 0;
-    // Default to rtAudio when running headless (offscreen) since Qt audio
-    // backend cannot enumerate devices without a display platform plugin.
-    if (qEnvironmentVariable("QT_QPA_PLATFORM") == "offscreen")
-        defPrefs.audioSystem = rtAudio;
-    else
-        defPrefs.audioSystem = qtAudio;
+    defPrefs.audioSystem = qtAudio;
     defPrefs.webPort = 8080;
     defPrefs.rxAudio.name = QString("default");
     defPrefs.txAudio.name = QString("default");

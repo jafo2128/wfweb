@@ -363,13 +363,12 @@ int audioDevices::findInput(QString type, QString name, bool ignoreDefault)
 
     int ret = -1;
     int def = -1;
-    int usb = -1;
+    int codec = -1;
     QString msg;
     QTextStream s(&msg);
 
     for (int f = 0; f < inputs.size(); f++)
     {
-        //qInfo(logAudio()) << "Found device" << inputs[f].name;
         if (!name.isEmpty() && name != "default" && inputs[f]->name.startsWith(name)) {
             s << type << " Audio input device " << name << " found! ";
             ret = f;
@@ -379,18 +378,24 @@ int audioDevices::findInput(QString type, QString name, bool ignoreDefault)
             {
                 def = f;
             }
-            if (inputs[f]->name.contains("USB",Qt::CaseInsensitive)) {
-                // This is a USB device...
-                usb = f;
+            if (codec < 0 &&
+                (inputs[f]->name.contains("USB", Qt::CaseInsensitive) ||
+                 inputs[f]->name.contains("CODEC", Qt::CaseInsensitive))) {
+                codec = f;
             }
         }
     }
- 
+
     if (ret == -1 && !ignoreDefault)
     {
-        if (name == "default" && def > -1) {
-            s << type << " Audio input: using system default device " << inputs[def]->name;
-            ret = def;
+        if (name == "default") {
+            if (codec > -1 && type != "Client") {
+                s << type << " Audio input: using USB/CODEC device " << inputs[codec]->name;
+                ret = codec;
+            } else if (def > -1) {
+                s << type << " Audio input: using system default device " << inputs[def]->name;
+                ret = def;
+            }
         }
         else {
             s << type << " Audio input device " << name << " Not found: ";
@@ -399,10 +404,10 @@ int audioDevices::findInput(QString type, QString name, bool ignoreDefault)
                 s << "Selecting first device " << inputs[0]->name;
                 ret = 0;
             }
-            else if (usb > -1 && type != "Client")
+            else if (codec > -1 && type != "Client")
             {
-                s << " Selecting found USB device " << inputs[usb]->name;
-                ret = usb;
+                s << " Selecting USB/CODEC device " << inputs[codec]->name;
+                ret = codec;
             }
             else if (def > -1)
             {
@@ -431,13 +436,12 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
 
     int ret = -1;
     int def = -1;
-    int usb = -1;
+    int codec = -1;
     QString msg;
     QTextStream s(&msg);
 
     for (int f = 0; f < outputs.size(); f++)
     {
-        //qInfo(logAudio()) << "Found device" << outputs[f].name;
         if (!name.isEmpty() && name != "default" && outputs[f]->name.startsWith(name)) {
             ret = f;
             s << type << " Audio output device " << name << " found! ";
@@ -447,9 +451,10 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
             {
                 def = f;
             }
-            if (outputs[f]->name.contains("USB",Qt::CaseInsensitive)) {
-                // This is a USB device...
-                usb = f;
+            if (codec < 0 &&
+                (outputs[f]->name.contains("USB", Qt::CaseInsensitive) ||
+                 outputs[f]->name.contains("CODEC", Qt::CaseInsensitive))) {
+                codec = f;
             }
         }
 
@@ -457,9 +462,14 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
 
     if (ret == -1 && !ignoreDefault)
     {
-        if (name == "default" && def > -1) {
-            s << type << " Audio output: using system default device " << outputs[def]->name;
-            ret = def;
+        if (name == "default") {
+            if (codec > -1 && type != "Client") {
+                s << type << " Audio output: using USB/CODEC device " << outputs[codec]->name;
+                ret = codec;
+            } else if (def > -1) {
+                s << type << " Audio output: using system default device " << outputs[def]->name;
+                ret = def;
+            }
         }
         else {
             s << type << " Audio output device " << name << " Not found: ";
@@ -468,10 +478,10 @@ int audioDevices::findOutput(QString type, QString name, bool ignoreDefault)
                 s << " Selecting first device " << outputs[0]->name;
                 ret = 0;
             }
-            else if (usb > -1 && type != "Client")
+            else if (codec > -1 && type != "Client")
             {
-                s << " Selecting found USB device " << outputs[usb]->name;
-                ret = usb;
+                s << " Selecting USB/CODEC device " << outputs[codec]->name;
+                ret = codec;
             }
             else if (def > -1)
             {
