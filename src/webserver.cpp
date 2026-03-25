@@ -1349,6 +1349,9 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
                 modeInfo m = modeCache.value.value<modeInfo>();
                 m.filter = filterNum;
                 queue->add(priorityImmediate, queueItem(t.modeFunc, QVariant::fromValue<modeInfo>(m), false, 0));
+                QTimer::singleShot(200, this, [this]() {
+                    if (queue) queue->add(priorityImmediate, funcFilterWidth, false, 0);
+                });
             }
         }
     }
