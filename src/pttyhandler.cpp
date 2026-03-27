@@ -146,9 +146,9 @@ void pttyHandler::receiveDataFromRigToPtty(const QByteArray& data)
     if (isConnected && (quint8)data[fePos + 2] != quint8(0xE1) && (quint8)data[fePos + 3] != quint8(0xE1))
     {
         // send to the pseudo port as well
-        // index 2 is dest, 0xE1 is wfview, 0xE0 is assumed to be the other device.
+        // index 2 is dest, 0xE1 is wfweb, 0xE0 is assumed to be the other device.
         // Changed to "Not 0xE1"
-        // 0xE1 = wfview
+        // 0xE1 = wfweb
         // 0xE0 = pseudo-term host
         // 0x00 = broadcast to all
         //qInfo(logSerial()) << "Sending data from radio to pseudo-terminal" << data.toHex(' ');

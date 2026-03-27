@@ -31,7 +31,7 @@
 #include <QIODevice>
 
 
-/* wfview Packet types */
+/* wfweb Packet types */
 #include "packettypes.h"
 
 /* Logarithmic taper for volume control */

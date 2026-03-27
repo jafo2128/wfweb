@@ -19,7 +19,7 @@
 #include "rtaudio/RtAudio.h"
 #endif
 
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 
 struct audioDevice {

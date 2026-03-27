@@ -10,7 +10,7 @@
 #include <QtSerialPort/QSerialPort>
 
 #include "rigidentities.h"
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 #include "cachingqueue.h"
 
 // This class abstracts the comm port in a useful way and connects to

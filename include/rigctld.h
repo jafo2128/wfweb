@@ -21,7 +21,7 @@
 
 #include "rigcommander.h"
 #include "cachingqueue.h"
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 #define CONSTANT_64BIT_FLAG(BIT) (1ull << (BIT))
 

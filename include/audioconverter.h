@@ -30,7 +30,7 @@
 #include <eigen3/Eigen/Dense>
 #endif
 
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 #include "resampler/speex_resampler.h"
 

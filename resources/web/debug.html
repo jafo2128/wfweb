@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>wfview Web</title>
+<title>wfweb Web</title>
 <style>
 :root {
     --bg: #1a1a2e;
@@ -419,7 +419,7 @@ header h1 { font-size: 1.2em; font-weight: 600; }
 <div class="container">
     <header>
         <div>
-            <h1>wfview Web</h1>
+            <h1>wfweb Web</h1>
             <span id="rigModel">Not connected</span>
         </div>
         <span id="connStatus">Disconnected</span>
@@ -1196,7 +1196,7 @@ function startAudio() {
 
 function startWithWorklet() {
     var processorCode = [
-        'class WfviewAudioProcessor extends AudioWorkletProcessor {',
+        'class WfwebAudioProcessor extends AudioWorkletProcessor {',
         '  constructor() {',
         '    super();',
         '    this.buffer = new Float32Array(sampleRate * 3);',
@@ -1251,7 +1251,7 @@ function startWithWorklet() {
         '    return true;',
         '  }',
         '}',
-        'registerProcessor("wfview-audio-processor", WfviewAudioProcessor);'
+        'registerProcessor("wfweb-audio-processor", WfwebAudioProcessor);'
     ].join('\n');
 
     var blob = new Blob([processorCode], { type: 'application/javascript' });
@@ -1259,7 +1259,7 @@ function startWithWorklet() {
 
     audioCtx.audioWorklet.addModule(url).then(function() {
         URL.revokeObjectURL(url);
-        audioWorkletNode = new AudioWorkletNode(audioCtx, 'wfview-audio-processor');
+        audioWorkletNode = new AudioWorkletNode(audioCtx, 'wfweb-audio-processor');
         audioWorkletNode.connect(audioCtx.destination);
         audioUseWorklet = true;
         send({ cmd: 'enableAudio', value: true });
@@ -1355,7 +1355,7 @@ function startMic() {
         var source = micAudioCtx.createMediaStreamSource(stream);
 
         var captureCode = [
-            'class WfviewCaptureProcessor extends AudioWorkletProcessor {',
+            'class WfwebCaptureProcessor extends AudioWorkletProcessor {',
             '  constructor() { super(); }',
             '  process(inputs) {',
             '    var input = inputs[0];',
@@ -1370,7 +1370,7 @@ function startMic() {
             '    return true;',
             '  }',
             '}',
-            'registerProcessor("wfview-capture-processor", WfviewCaptureProcessor);'
+            'registerProcessor("wfweb-capture-processor", WfwebCaptureProcessor);'
         ].join('\n');
 
         var blob = new Blob([captureCode], { type: 'application/javascript' });
@@ -1378,7 +1378,7 @@ function startMic() {
 
         micAudioCtx.audioWorklet.addModule(url).then(function() {
             URL.revokeObjectURL(url);
-            micWorkletNode = new AudioWorkletNode(micAudioCtx, 'wfview-capture-processor');
+            micWorkletNode = new AudioWorkletNode(micAudioCtx, 'wfweb-capture-processor');
             source.connect(micWorkletNode);
             micWorkletNode.connect(micAudioCtx.destination);
 

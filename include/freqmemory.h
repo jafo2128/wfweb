@@ -2,7 +2,7 @@
 #define FREQMEMORY_H
 #include <QString>
 #include <QDebug>
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 struct preset_kind {
     // QString name;

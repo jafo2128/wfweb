@@ -5,7 +5,7 @@
 #include <QElapsedTimer>
 #include <QLibrary>
 #include "packettypes.h"
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 // Forward declare types instead of including headers
 typedef void* FT_HANDLE;

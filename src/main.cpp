@@ -24,7 +24,11 @@
 #include <QAudioDevice>
 #endif
 
+#ifdef BUILD_WFSERVER
+#include "servermain.h"
+#else
 #include "wfmain.h"
+#endif
 
 #include "logcategories.h"
 
@@ -120,8 +124,8 @@ int main(int argc, char *argv[])
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
 #endif
     QCoreApplication a(argc, argv);
-    a.setOrganizationName("wfview");
-    a.setOrganizationDomain("wfview.org");
+    a.setOrganizationName("wfweb");
+    a.setOrganizationDomain("wfweb.org");
     a.setApplicationName("wfweb");
     kb = new keyboard();
 #else
@@ -129,9 +133,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
     QApplication a(argc, argv);
-    a.setOrganizationName("wfview");
-    a.setOrganizationDomain("wfview.org");
-    a.setApplicationName("wfview");
+    a.setOrganizationName("wfweb");
+    a.setOrganizationDomain("wfweb.org");
+    a.setApplicationName("wfweb");
 #endif
 
 #ifdef QT_DEBUG
@@ -172,13 +176,13 @@ int main(int argc, char *argv[])
         "  -? --help               Show this help\n");
 #ifdef BUILD_WFSERVER
     const QString version = QString("wfweb version: %1 (Git:%2 on %3 at %4 by %5@%6)\nOperating System: %7 (%8)\nBuild Qt Version %9. Current Qt Version: %10\n")
-        .arg(QString(WFVIEW_VERSION))
+        .arg(QString(WFWEB_VERSION))
         .arg(GITSHORT).arg(__DATE__).arg(__TIME__).arg(UNAME).arg(HOST)
         .arg(QSysInfo::prettyProductName()).arg(QSysInfo::buildCpuArchitecture())
         .arg(QT_VERSION_STR).arg(qVersion());
 #else
-    const QString version = QString("wfview version: %1 (Git:%2 on %3 at %4 by %5@%6)\nOperating System: %7 (%8)\nBuild Qt Version %9. Current Qt Version: %10\n")
-        .arg(QString(WFVIEW_VERSION))
+    const QString version = QString("wfweb version: %1 (Git:%2 on %3 at %4 by %5@%6)\nOperating System: %7 (%8)\nBuild Qt Version %9. Current Qt Version: %10\n")
+        .arg(QString(WFWEB_VERSION))
         .arg(GITSHORT).arg(__DATE__).arg(__TIME__).arg(UNAME).arg(HOST)
         .arg(QSysInfo::prettyProductName()).arg(QSysInfo::buildCpuArchitecture())
         .arg(QT_VERSION_STR).arg(qVersion());
@@ -187,7 +191,7 @@ int main(int argc, char *argv[])
     QTranslator myappTranslator;
     qDebug() << "Current translation language: " << myappTranslator.language();
 
-    bool trResult = myappTranslator.load(QLocale(), QLatin1String("wfview"), QLatin1String("_"), QLatin1String(":/translations"));
+    bool trResult = myappTranslator.load(QLocale(), QLatin1String("wfweb"), QLatin1String("_"), QLatin1String(":/translations"));
     if(trResult) {
         qDebug() << "Recognized requested language and loaded the translations (or at least found the /translations resource folder). Installing translator.";
         a.installTranslator(&myappTranslator);
@@ -254,7 +258,7 @@ int main(int argc, char *argv[])
                     }
                     settings->clear();
                     delete settings;
-                    std::cout << QString("All wfview settings cleared.\n").toStdString();
+                    std::cout << QString("All wfweb settings cleared.\n").toStdString();
                     exit(0);
                 }
             }

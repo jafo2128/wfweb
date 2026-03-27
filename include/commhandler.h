@@ -9,7 +9,7 @@
 #include <QTime>
 #include <QTimer>
 
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 // This class abstracts the comm port in a useful way and connects to
 // the command creator and command parser.

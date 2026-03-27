@@ -6,7 +6,6 @@
 
 QT       += core serialport network multimedia websockets
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets printsupport
 
 TARGET = wfweb
 TEMPLATE = app
@@ -16,7 +15,7 @@ macx:CONFIG -= app_bundle
 macx:CONFIG += c++17
 win32:CONFIG += c++17
 
-DEFINES += WFVIEW_VERSION=\\\"0.4.0\\\"
+DEFINES += WFWEB_VERSION=\\\"0.4.0\\\"
 
 DEFINES += BUILD_WFSERVER
 
@@ -115,8 +114,6 @@ win32:LIBS += -lopus -lole32 -luser32
 # depend on your compiler). Please consult the documentation of the
 # deprecated API in order to know how to port your code away from it.
 DEFINES += QT_DEPRECATED_WARNINGS
-DEFINES += QCUSTOMPLOT_COMPILE_LIBRARY
-
 
 # These defines are used for the resampler
 equals(QT_ARCH, i386): DEFINES += USE_SSE
@@ -140,13 +137,8 @@ DEFINES += PREFIX=\\\"$$PREFIX\\\"
 macx:INCLUDEPATH += /usr/local/include /opt/local/include /opt/homebrew/include
 macx:LIBS += -L/usr/local/lib -L/opt/local/lib -L/opt/homebrew/lib
 
-macx:ICON = resources/wfview.icns
-win32:RC_ICONS = "resources/icons/Windows/wfview 512x512.ico"
 QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.15
-QMAKE_TARGET_BUNDLE_PREFIX = org.wfview
-MY_ENTITLEMENTS.name = CODE_SIGN_ENTITLEMENTS
-MY_ENTITLEMENTS.value = resources/wfview.entitlements
-QMAKE_MAC_XCODE_SETTINGS += MY_ENTITLEMENTS
+QMAKE_TARGET_BUNDLE_PREFIX = org.wfweb
 QMAKE_INFO_PLIST = resources/Info.plist
 
 macx{
@@ -164,12 +156,11 @@ INSTALLS += rigs
 !win32:DEFINES += GITSHORT="\\\"$(shell git -C $$PWD rev-parse --short HEAD)\\\""
 win32:DEFINES += GITSHORT=\\\"$$system(git -C $$PWD rev-parse --short HEAD)\\\"
 
-win32:DEFINES += HOST=\\\"wfview.org\\\"
+win32:DEFINES += HOST=\\\"wfweb.org\\\"
 win32:DEFINES += UNAME=\\\"build\\\"
 
 
-RESOURCES += qdarkstyle/style.qrc \
-    resources/web.qrc
+RESOURCES += resources/web.qrc
 
 unix:target.path = $$PREFIX/bin
 INSTALLS += target
@@ -294,7 +285,7 @@ HEADERS  += \
     include/tcpserver.h \
     include/audiotaper.h \
     include/keyboard.h \
-    include/wfviewtypes.h \
+    include/wfwebtypes.h \
     include/audiodevices.h \
     include/pttyhandler.h \
     include/icomcommander.h \

@@ -126,7 +126,7 @@ static bool generateSelfSignedCert(const QString &certPath, const QString &keyPa
     {
         X509_NAME *name = X509_get_subject_name(x509);
         X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
-                                   reinterpret_cast<const unsigned char *>("wfview"), -1, -1, 0);
+                                   reinterpret_cast<const unsigned char *>("wfweb"), -1, -1, 0);
         X509_set_issuer_name(x509, name); // self-signed
     }
 
@@ -164,8 +164,8 @@ bool webServer::setupSsl()
 
     QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dataDir);
-    QString certPath = dataDir + "/wfview-web.crt";
-    QString keyPath = dataDir + "/wfview-web.key";
+    QString certPath = dataDir + "/wfweb-web.crt";
+    QString keyPath = dataDir + "/wfweb-web.key";
 
     // Generate self-signed cert if not present
     if (!QFile::exists(certPath) || !QFile::exists(keyPath)) {
@@ -183,7 +183,7 @@ bool webServer::setupSsl()
             << "req" << "-x509" << "-newkey" << "rsa:2048"
             << "-keyout" << keyPath << "-out" << certPath
             << "-days" << "3650" << "-nodes"
-            << "-subj" << "/CN=wfview");
+            << "-subj" << "/CN=wfweb");
         if (!proc.waitForFinished(10000) || proc.exitCode() != 0) {
             qWarning() << "Web: Failed to generate SSL certificate:" << proc.readAllStandardError();
             return false;
@@ -288,7 +288,7 @@ void webServer::init(quint16 httpPort, quint16 wsPort)
         }
 
         // WebSocket server in NonSecureMode (SSL handled by SslTcpServer or TLS proxy)
-        wsServer = new QWebSocketServer(QStringLiteral("wfview Web"), QWebSocketServer::NonSecureMode, this);
+        wsServer = new QWebSocketServer(QStringLiteral("wfweb Web"), QWebSocketServer::NonSecureMode, this);
         connect(wsServer, &QWebSocketServer::newConnection, this, &webServer::onWsNewConnection);
 
         // Plain HTTP server on wsPort for microcontrollers/scripts that don't support TLS
@@ -310,7 +310,7 @@ void webServer::init(quint16 httpPort, quint16 wsPort)
             qWarning() << "Web HTTP server failed to listen on port" << httpPort;
         }
 
-        wsServer = new QWebSocketServer(QStringLiteral("wfview Web"), QWebSocketServer::NonSecureMode, this);
+        wsServer = new QWebSocketServer(QStringLiteral("wfweb Web"), QWebSocketServer::NonSecureMode, this);
         if (wsServer->listen(QHostAddress::Any, wsPort)) {
             qInfo() << "Web WebSocket server listening on port" << wsPort;
             connect(wsServer, &QWebSocketServer::newConnection, this, &webServer::onWsNewConnection);
@@ -1488,7 +1488,7 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
 QJsonObject webServer::buildInfoJson() const
 {
     QJsonObject info;
-    info["version"] = QString(WFVIEW_VERSION);
+    info["version"] = QString(WFWEB_VERSION);
 
     if (rigCaps) {
         info["connected"] = true;

@@ -1,5 +1,5 @@
 /* 
-	wfview class to enumerate audio devices and assist with matching saved devices
+	wfweb class to enumerate audio devices and assist with matching saved devices
 
 	Written by Phil Taylor M0VSE Nov 2022.
 

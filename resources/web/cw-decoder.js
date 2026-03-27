@@ -1,4 +1,4 @@
-// CW Decoder for wfview - Based on web-deep-cw-decoder
+// CW Decoder for wfweb - Based on web-deep-cw-decoder
 // This implementation copies the demo as closely as possible
 
 (function() {
@@ -245,7 +245,7 @@
         updateButtons();
 
         try {
-            // Wait for wfview's audio context to be available (poll for up to 5 seconds)
+            // Wait for wfweb's audio context to be available (poll for up to 5 seconds)
             let waitCount = 0;
             while (!window.audioCtx && waitCount < 50) {
                 await new Promise(r => setTimeout(r, 100));

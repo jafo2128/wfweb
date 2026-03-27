@@ -1,6 +1,6 @@
 
-#ifndef WFVIEWTYPES_H
-#define WFVIEWTYPES_H
+#ifndef WFWEBTYPES_H
+#define WFWEBTYPES_H
 
 #include <QObject>
 #include <QString>
@@ -823,4 +823,4 @@ Q_DECLARE_METATYPE(spectrumBounds)
 Q_DECLARE_METATYPE(rigInfo)
 Q_DECLARE_METATYPE(lpfhpf)
 
-#endif // WFVIEWTYPES_H
+#endif // WFWEBTYPES_H

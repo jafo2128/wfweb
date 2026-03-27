@@ -7,7 +7,7 @@
 #include <QRegularExpression>
 #include <QDebug>
 
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 #include "commhandler.h"
 #include "pttyhandler.h"
 #include "icomudphandler.h"

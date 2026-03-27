@@ -24,7 +24,7 @@
 #include <QDebug>
 
 #include "packettypes.h"
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 
 struct udpPreferences {
     connectionType_t connectionType;

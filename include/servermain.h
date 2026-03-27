@@ -10,7 +10,6 @@
 #include <QVector>
 #include <QTimer>
 #include <QSettings>
-#include <QShortcut>
 #include <QMetaType>
 #include <QSet>
 

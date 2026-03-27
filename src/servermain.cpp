@@ -301,7 +301,7 @@ void servermain::receiveCommReady()
             if (radio->civAddr == 0)
             {
                 // tell rigCommander to broadcast a request for all rig IDs.
-                // qInfo(logSystem()) << "Beginning search from wfview for rigCIV (auto-detection broadcast)";
+                // qInfo(logSystem()) << "Beginning search from wfweb for rigCIV (auto-detection broadcast)";
                 if (!radio->rigAvailable) {
                     if (radio->connectTimer == Q_NULLPTR) {
                         radio->connectTimer = new QTimer();
@@ -383,7 +383,7 @@ void servermain::receiveRigCaps(rigCapabilities* rigCaps)
             radio->rigCaps = rigCaps;
 
             // Enable CI-V Auto Information so the rig pushes meter/freq/mode
-            // updates automatically (same as wfview does in setupInitialValues)
+            // updates automatically (same as wfweb does in setupInitialValues)
             if (rigCaps->commands.contains(funcAutoInformation)) {
                 queue->add(priorityImmediate, queueItem(funcAutoInformation, QVariant::fromValue(uchar(2)), false, 0));
                 // Enable metering data in the AutoInformation stream
@@ -557,7 +557,7 @@ void servermain::loadSettings()
     if (numRadios == 0) {
         settings->endArray();
 
-        // No Radios array found. Try reading flat [Radio] section (wfview-style config).
+        // No Radios array found. Try reading flat [Radio] section (wfweb-style config).
         unsigned char flatCiv = defPrefs.radioCIVAddr;
         manufacturersType_t flatManuf = defPrefs.manufacturer;
         QString flatSerial = defPrefs.serialPortRadio;

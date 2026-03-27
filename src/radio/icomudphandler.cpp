@@ -16,7 +16,7 @@ icomUdpHandler::icomUdpHandler(udpPreferences prefs, audioSetup rx, audioSetup t
     this->port = this->controlPort;
     this->username = prefs.username;
     this->password = prefs.password;
-    this->compName = prefs.clientName.mid(0,8) + "-wfview";
+    this->compName = prefs.clientName.mid(0,8) + "-wfweb";
 
     if (prefs.waterfallFormat == 2)
     {

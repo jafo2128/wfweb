@@ -14,7 +14,7 @@
 #include <QDateTime>
 #include <QRandomGenerator>
 
-#include "wfviewtypes.h"
+#include "wfwebtypes.h"
 #include "rigidentities.h"
 
 enum queuePriority {
