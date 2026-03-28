@@ -991,7 +991,7 @@ void webServer::handleRestRequest(QTcpSocket *socket, const QString &method,
             }
             if (obj.contains("split")) {
                 uchar val = obj["split"].toBool() ? 1 : 0;
-                queue->add(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(val), false, 0));
+                queue->addUnique(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(val), false, 0));
             }
             if (obj.contains("tuner")) {
                 uchar val = static_cast<uchar>(qBound(0, obj["tuner"].toInt(), 2));
@@ -1091,8 +1091,30 @@ void webServer::handleRestRequest(QTcpSocket *socket, const QString &method,
             QJsonObject e; e["error"] = "Invalid channel number";
             sendRestResponse(socket, 400, e); return;
         }
-        uint val = uint(ch);
-        queue->addUnique(priorityImmediate, queueItem(funcMemoryToVFO, QVariant::fromValue<uint>(val), false, 0));
+        quint32 key = (quint32(0) << 16) | ch;
+        auto it = memories.find(key);
+        if (it == memories.end()) {
+            QJsonObject e; e["error"] = "Memory channel not found";
+            sendRestResponse(socket, 404, e); return;
+        }
+        const memoryType &mem = it.value();
+        // Set frequency
+        vfoCommandType tA = queue->getVfoCommand(vfoA, 0, true);
+        freqt f;
+        f.Hz = mem.frequency.Hz;
+        f.MHzDouble = mem.frequency.Hz / 1.0E6;
+        f.VFO = activeVFO;
+        queue->addUnique(priorityImmediate, queueItem(tA.freqFunc, QVariant::fromValue<freqt>(f), false, 0));
+        // Set mode
+        for (const modeInfo &mi : rigCaps->modes) {
+            if (mi.reg == mem.mode) {
+                modeInfo m = mi;
+                m.filter = mem.filter > 0 ? mem.filter : 1;
+                m.data = 0;
+                queue->addUnique(priorityImmediate, queueItem(tA.modeFunc, QVariant::fromValue<modeInfo>(m), false, 0));
+                break;
+            }
+        }
         QJsonObject resp; resp["status"] = "accepted";
         sendRestResponse(socket, 202, resp);
         return;
@@ -1286,15 +1308,6 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         queue->add(priorityImmediate, funcVFOEqualAB, false, false);
         requestVfoUpdate();
     }
-    else if (type == "setMemoryMode") {
-        // Send funcMemoryMode with channel 1 to enter memory mode (bare command causes GET/garbage)
-        uint val = 1;
-        queue->add(priorityImmediate, queueItem(funcMemoryMode, QVariant::fromValue<uint>(val), false, 0));
-    }
-    else if (type == "setVFOMode") {
-        // Use funcSelectVFO with vfoA to return to VFO mode
-        queue->addUnique(priorityImmediate, queueItem(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoA), false));
-    }
     else if (type == "setPTT") {
         bool on = cmd["value"].toBool();
         queue->add(priorityImmediate, queueItem(funcTransceiverStatus, QVariant::fromValue<bool>(on), false, uchar(0)));
@@ -1417,7 +1430,7 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
     }
     else if (type == "setSplit") {
         bool on = cmd["value"].toBool();
-        queue->add(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(on ? 1 : 0), false, 0));
+        queue->addUnique(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(on ? 1 : 0), false, 0));
     }
     else if (type == "setSpan") {
         int idx = cmd["value"].toInt();
@@ -1573,13 +1586,6 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<uint>(val), false, 0));
         memoryScanTimer->start();
     }
-    else if (type == "recallMemory") {
-        if (!queue || !rigCaps) return;
-        int ch = cmd["channel"].toInt();
-        int group = cmd.contains("group") ? cmd["group"].toInt() : 0;
-        uint val = (uint(group) << 16) | uint(ch);
-        queue->addUnique(priorityImmediate, queueItem(funcMemoryToVFO, QVariant::fromValue<uint>(val), false, 0));
-    }
     else if (type == "writeMemory") {
         if (!queue || !rigCaps) return;
         int ch = cmd["channel"].toInt();
@@ -1590,18 +1596,17 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         mem.channel = ch;
         mem.group = group;
         mem.del = false;
-        mem.split = 0;
         mem.skip = 0;
         mem.scan = 0;
         memset(mem.name, ' ', sizeof(mem.name) - 1);
         mem.name[sizeof(mem.name) - 1] = '\0';
-        // Get current frequency
+        mem.split = 0;
+        // Get current VFO A frequency and mode
         vfoCommandType tA = queue->getVfoCommand(vfoA, 0, false);
         cacheItem freqCache = queue->getCache(tA.freqFunc, 0);
         if (freqCache.value.isValid()) {
             mem.frequency = freqCache.value.value<freqt>();
         }
-        // Get current mode
         cacheItem modeCache = queue->getCache(tA.modeFunc, 0);
         if (modeCache.value.isValid()) {
             modeInfo m = modeCache.value.value<modeInfo>();
@@ -1613,7 +1618,7 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
             mem.filter = 1;
             mem.datamode = 0;
         }
-        // Copy VFO A data to VFO B (required by IC-7300 memory format)
+        // Copy VFO A to B fields (no split support)
         mem.frequencyB = mem.frequency;
         mem.modeB = mem.mode;
         mem.filterB = mem.filter;

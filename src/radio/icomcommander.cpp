@@ -839,7 +839,11 @@ void icomCommander::parseCommand()
         value.setValue(static_cast<bool>(payloadIn.at(0)));
         break;
     case funcMemoryMode:
-        qInfo(logRig) << "Memory Mode command!";
+        if (payloadIn.size() >= 2) {
+            value.setValue(static_cast<uint>(bcdHexToUChar(payloadIn.at(0), payloadIn.at(1))));
+        } else if (payloadIn.size() == 1) {
+            value.setValue(static_cast<uint>(bcdHexToUChar(payloadIn.at(0))));
+        }
         break;
     case funcSatelliteMemory:
         memParser=rigCaps.satParser;
@@ -877,9 +881,10 @@ void icomCommander::parseCommand()
     case funcAttenuator:
         value.setValue(bcdHexToUChar(payloadIn.at(0)));
         break;
-    // Return a duplexMode_t for split or duplex (same function)
+    // Split/duplex status: store as bool (on = dmSplitOn, off = anything else)
+    // Must be bool to match Kenwood/Yaesu and for webserver toBool() to work
     case funcSplitStatus:
-        value.setValue(static_cast<duplexMode_t>(uchar(payloadIn.at(0))));
+        value.setValue(uchar(payloadIn.at(0)) == dmSplitOn);
         break;
     case funcQuickSplit:
         value.setValue(bcdHexToUChar(payloadIn.at(0)));
@@ -2935,7 +2940,7 @@ void icomCommander::receiveCommand(funcs func, QVariant value, uchar receiver)
                 queue->addUnique(priorityImmediate,funcModeGet,false,receiver);
             } else if (cmd.getCmd && func != funcScopeFixedEdgeFreq && func != funcSpeech &&
                        func != funcBandStackReg && func != funcMemoryContents && func != funcSatelliteMemory && func != funcSendCW &&
-                       func != funcTransceiverStatus) {
+                       func != funcTransceiverStatus && func != funcMemoryMode) {
                 // This was a set command, so queue a get to retrieve the updated value
                 queue->addUnique(priorityImmediate,func,false,receiver);
             }

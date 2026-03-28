@@ -381,16 +381,22 @@ void cachingQueue::updateCache(bool reply, queueItem item)
         // If we are requesting a particular VFO, set our state as the rig will not reply
         if (item.command == funcSelectVFO) {
             rigState.vfo = item.param.value<vfo_t>();
+            if (item.param.value<vfo_t>() != vfoMem)
+                rigState.vfoMode = vfoModeType_t::vfoModeVfo;
         } else if (item.command == funcVFOASelect) {
             rigState.vfo = vfo_t::vfoA;
+            rigState.vfoMode = vfoModeType_t::vfoModeVfo;
         } else if (item.command == funcVFOBSelect && rigCaps->numVFO > 1) {
             rigState.vfo = vfo_t::vfoB;
+            rigState.vfoMode = vfoModeType_t::vfoModeVfo;
         } else if (item.command == funcVFOMainSelect) {
             rigState.vfo = vfo_t::vfoMain;
             rigState.receiver=0;
+            rigState.vfoMode = vfoModeType_t::vfoModeVfo;
         } else if (item.command == funcVFOSubSelect && rigCaps->numReceiver > 1) {
             rigState.vfo = vfo_t::vfoSub;
             rigState.receiver=1;
+            rigState.vfoMode = vfoModeType_t::vfoModeVfo;
         }
     }
 

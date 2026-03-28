@@ -1696,27 +1696,6 @@ body.digi-open .digi-bar {
 #memWritePrompt button:active { background: #048; color: #000; }
 
 /* MEM mini overlay (compact bar for MEM mode navigation) */
-.mem-mini {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 6px 12px;
-    background: #0a0a0a;
-    border-top: 1px solid #333;
-}
-.mem-mini.visible { display: flex; }
-.mem-mini button {
-    padding: 4px 14px; background: #1a1a1a; border: 1px solid #444;
-    color: #aaa; cursor: pointer; border-radius: 3px; font-size: 14px;
-}
-.mem-mini button:hover { border-color: #0aa; color: #0ff; }
-.mem-mini-del { color: #844 !important; }
-.mem-mini-del:hover { color: #f44 !important; border-color: #844 !important; }
-#memMiniInfo {
-    color: #0c0; font-family: 'Courier New', monospace; font-size: 12px;
-    min-width: 180px; text-align: center;
-}
 
 .gain-bar-fill.centered {
     position: absolute; top: 0; height: 100%;
@@ -2004,7 +1983,6 @@ body.digi-open .digi-bar {
         <span id="dspIndicators"></span>
         <span class="flex-space"></span>
         <button id="qsoLogBtn" class="qso-log-btn" title="Log QSO">LOG</button>
-        <button id="memBrowseBtn" class="qso-log-btn" title="Browse Memories" onclick="openMemoryBrowser()">MEM</button>
         <span id="clock">--:--</span>
         <button id="powerBtn" class="on" title="Power" onclick="togglePower()">&#x23FB;</button>
         <span id="connDot" title="Disconnected"></span>
@@ -2091,13 +2069,6 @@ body.digi-open .digi-bar {
             </div>
         </div>
 
-        <!-- MEM mini overlay (shown in MEM mode) -->
-        <div id="memMiniOverlay" class="mem-mini">
-            <button onclick="memNavDown()">&#x25BC;</button>
-            <span id="memMiniInfo">---</span>
-            <button onclick="memNavUp()">&#x25B2;</button>
-            <button class="mem-mini-del" onclick="memDeleteCurrent()" title="Clear channel">&#x2715;</button>
-        </div>
 
         <!-- CW Bar (minimal bottom interface) -->
         <div id="cwBar" class="cw-bar hidden">
@@ -2489,8 +2460,6 @@ var availableModes = defaultModes.slice();
 var availablePreamps = [];
 var availableFilters = [];
 var currentVfo = 'A';
-var vfoMode = 'VFO'; // 'VFO' or 'MEM'
-var currentMemoryChannel = 1;
 
 // Meter state
 var meterVal = -54;
@@ -3694,10 +3663,9 @@ function renderFuncOverlay() {
         grid.appendChild(fbtn);
     }
 
-    // V/M toggle
-    grid.appendChild(makeFuncBtn('V/M', vfoMode === 'MEM' ? 'MEM' : 'VFO', vfoMode === 'MEM', function() {
-        toggleVfoMemMode();
-        setPanel('default');
+    // Memory browser
+    grid.appendChild(makeFuncBtn('MEM', '', false, function() {
+        openMemoryBrowser();
     }));
 
     // Fill remaining slots + back
@@ -4104,123 +4072,13 @@ function setMode(mode) {
 function updateVfoDisplay() {
     var label = document.getElementById('vfoLabel');
     var num = document.getElementById('vfoNum');
-    if (vfoMode === 'MEM') {
-        label.textContent = 'MEM';
-        num.textContent = currentMemoryChannel;
-        num.style.display = 'inline';
-    } else {
-        label.textContent = 'VFO ' + currentVfo;
-        num.style.display = 'none';
-    }
+    label.textContent = 'VFO ' + currentVfo;
+    num.style.display = 'none';
 }
 
-function toggleVfoMemMode() {
-    if (vfoMode === 'MEM') {
-        // Switch to VFO mode
-        send({ cmd: 'setVFOMode' });
-        vfoMode = 'VFO';
-        hideMemMiniOverlay();
-    } else {
-        // Switch to MEM mode
-        send({ cmd: 'setMemoryMode' });
-        vfoMode = 'MEM';
-        // Scan memories if not already loaded
-        if (Object.keys(memoryChannels).length === 0) {
-            refreshMemories();
-        }
-        showMemMiniOverlay();
-    }
-    updateVfoDisplay();
-}
-
-function showMemMiniOverlay() {
-    document.getElementById('memMiniOverlay').classList.add('visible');
-    updateMemMiniDisplay();
-}
-
-function hideMemMiniOverlay() {
-    document.getElementById('memMiniOverlay').classList.remove('visible');
-}
-
-function updateMemMiniDisplay() {
-    var mem = getMemoryByChannel(currentMemoryChannel);
-    var info = document.getElementById('memMiniInfo');
-    if (mem) {
-        info.textContent = formatMemFreq(mem.frequency) + ' ' + (mem.mode || '') + (mem.name ? ' ' + mem.name : '');
-    } else {
-        info.textContent = 'CH ' + currentMemoryChannel + ' (empty)';
-    }
-}
-
-function getMemoryByChannel(ch) {
-    var keys = Object.keys(memoryChannels);
-    for (var i = 0; i < keys.length; i++) {
-        var m = memoryChannels[keys[i]];
-        if (m.channel === ch && !m.del && !m.empty) return m;
-    }
-    return null;
-}
-
-function memNavUp() {
-    if (vfoMode !== 'MEM') return;
-    var sorted = getSortedMemoryChannels();
-    if (sorted.length === 0) return;
-    // Find next channel above current
-    for (var i = 0; i < sorted.length; i++) {
-        if (sorted[i].channel > currentMemoryChannel) {
-            recallMemoryChannel(sorted[i]);
-            return;
-        }
-    }
-    // Wrap to first
-    recallMemoryChannel(sorted[0]);
-}
-
-function memNavDown() {
-    if (vfoMode !== 'MEM') return;
-    var sorted = getSortedMemoryChannels();
-    if (sorted.length === 0) return;
-    // Find next channel below current
-    for (var i = sorted.length - 1; i >= 0; i--) {
-        if (sorted[i].channel < currentMemoryChannel) {
-            recallMemoryChannel(sorted[i]);
-            return;
-        }
-    }
-    // Wrap to last
-    recallMemoryChannel(sorted[sorted.length - 1]);
-}
-
-function getSortedMemoryChannels() {
-    var keys = Object.keys(memoryChannels);
-    var arr = [];
-    for (var i = 0; i < keys.length; i++) {
-        var m = memoryChannels[keys[i]];
-        if (!m.del && !m.empty) arr.push(m);
-    }
-    arr.sort(function(a, b) { return a.channel - b.channel; });
-    return arr;
-}
-
-function recallMemoryChannel(mem) {
-    currentMemoryChannel = mem.channel;
-    if (mem.frequency) send({ cmd: 'setFrequency', value: mem.frequency });
-    if (mem.mode) send({ cmd: 'setMode', value: mem.mode });
-    updateVfoDisplay();
-    updateMemMiniDisplay();
-}
-
-function memDeleteCurrent() {
-    if (vfoMode !== 'MEM') return;
-    send({ cmd: 'clearMemory', channel: currentMemoryChannel, group: 0 });
-    var key = currentMemoryChannel;
-    delete memoryChannels[key];
-    updateMemMiniDisplay();
-}
 function selectVFO(vfo) {
     send({ cmd: 'selectVFO', value: vfo });
     currentVfo = vfo;
-    vfoMode = 'VFO';
     updateVfoDisplay();
     renderBottomBar();
     updateOtherVfoDisplay();
@@ -4228,7 +4086,6 @@ function selectVFO(vfo) {
 function swapVFO() {
     send({ cmd: 'swapVFO' });
     currentVfo = (currentVfo === 'A') ? 'B' : 'A';
-    vfoMode = 'VFO';
     updateVfoDisplay();
     updateOtherVfoDisplay();
     renderBottomBar();
@@ -4821,8 +4678,8 @@ document.addEventListener('keydown', function(e) {
     if (macroEditor && macroEditor.style.display !== 'none') return;
 
     if (e.key === 'l' || e.key === 'L') { e.preventDefault(); openLogModal(); }
-    else if (e.key === 'ArrowUp' || e.key === '+') { e.preventDefault(); if (vfoMode === 'MEM') memNavUp(); else tuneUp(); }
-    else if (e.key === 'ArrowDown' || e.key === '-') { e.preventDefault(); if (vfoMode === 'MEM') memNavDown(); else tuneDown(); }
+    else if (e.key === 'ArrowUp' || e.key === '+') { e.preventDefault(); tuneUp(); }
+    else if (e.key === 'ArrowDown' || e.key === '-') { e.preventDefault(); tuneDown(); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); tuneUpHz(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); tuneDownHz(); }
     else if (e.key === 'Escape') {
@@ -4951,7 +4808,6 @@ document.getElementById('freqDisplay').addEventListener('click', function() {
 });
 
 document.getElementById('vfoLabel').addEventListener('click', function() {
-    if (vfoMode === 'MEM') return; // V/M toggle is in FUNC
     selectVFO(currentVfo === 'A' ? 'B' : 'A');
 });
 
