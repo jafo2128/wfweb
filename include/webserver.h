@@ -200,6 +200,17 @@ private:
     rigInput savedDataOffMod;
     bool dataOffModSaved = false;
     QWebSocket *micActiveClient = nullptr;
+
+    // Memory channel scanning
+    QMap<quint32, memoryType> memories;  // key = (group << 16) | channel
+    bool memoryScanActive = false;
+    int memoryScanCurrent = 0;
+    int memoryScanEnd = 0;
+    int memoryScanGroup = 0;
+    QTimer *memoryScanTimer = nullptr;
+    QJsonObject memoryToJson(const memoryType &mem);
+    QString modeRegToString(quint8 reg);
+    void scanNextMemory();
 };
 
 #endif // WEBSERVER_H
