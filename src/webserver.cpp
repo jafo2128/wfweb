@@ -1053,6 +1053,51 @@ void webServer::handleRestRequest(QTcpSocket *socket, const QString &method,
         return;
     }
 
+    // --- GET /api/v1/radio/memories ---
+    if (p == "/api/v1/radio/memories") {
+        if (method == "GET") {
+            QJsonArray arr;
+            for (auto it = memories.constBegin(); it != memories.constEnd(); ++it) {
+                if (!it.value().del) {
+                    arr.append(memoryToJson(it.value()));
+                }
+            }
+            QJsonObject resp;
+            resp["memories"] = arr;
+            resp["count"] = arr.size();
+            sendRestResponse(socket, 200, resp);
+        } else {
+            QJsonObject e; e["error"] = "Method not allowed";
+            sendRestResponse(socket, 405, e);
+        }
+        return;
+    }
+
+    // --- POST /api/v1/radio/memories/{channel}/recall ---
+    if (p.startsWith("/api/v1/radio/memories/") && p.endsWith("/recall")) {
+        if (method != "POST") {
+            QJsonObject e; e["error"] = "Method not allowed";
+            sendRestResponse(socket, 405, e); return;
+        }
+        if (!queue || !rigCaps) {
+            QJsonObject e; e["error"] = "Rig not connected";
+            sendRestResponse(socket, 503, e); return;
+        }
+        // Extract channel number from path
+        QString mid = p.mid(22); // after "/api/v1/radio/memories/"
+        mid.chop(7); // remove "/recall"
+        int ch = mid.toInt();
+        if (ch <= 0) {
+            QJsonObject e; e["error"] = "Invalid channel number";
+            sendRestResponse(socket, 400, e); return;
+        }
+        uint val = uint(ch);
+        queue->addUnique(priorityImmediate, queueItem(funcMemoryToVFO, QVariant::fromValue<uint>(val), false, 0));
+        QJsonObject resp; resp["status"] = "accepted";
+        sendRestResponse(socket, 202, resp);
+        return;
+    }
+
     // 404 for unknown paths
     QJsonObject e; e["error"] = "Unknown API endpoint";
     sendRestResponse(socket, 404, e);
@@ -1234,6 +1279,15 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
     else if (type == "equalizeVFO") {
         queue->add(priorityImmediate, funcVFOEqualAB, false, false);
         requestVfoUpdate();
+    }
+    else if (type == "setMemoryMode") {
+        // Send funcMemoryMode with channel 1 to enter memory mode (bare command causes GET/garbage)
+        uint val = 1;
+        queue->add(priorityImmediate, queueItem(funcMemoryMode, QVariant::fromValue<uint>(val), false, 0));
+    }
+    else if (type == "setVFOMode") {
+        // Use funcSelectVFO with vfoA to return to VFO mode
+        queue->addUnique(priorityImmediate, queueItem(funcSelectVFO, QVariant::fromValue<vfo_t>(vfoA), false));
     }
     else if (type == "setPTT") {
         bool on = cmd["value"].toBool();
@@ -1475,6 +1529,121 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         } else {
             emit requestPowerOff();
         }
+    }
+    else if (type == "getMemories") {
+        if (!queue || !rigCaps) {
+            QJsonObject err;
+            err["type"] = "memoryScanComplete";
+            err["count"] = 0;
+            err["error"] = "Rig not connected";
+            sendJsonTo(client, err);
+            return;
+        }
+        if (!rigCaps->commands.contains(funcMemoryContents) || rigCaps->memParser.isEmpty()) {
+            QJsonObject err;
+            err["type"] = "memoryScanComplete";
+            err["count"] = 0;
+            err["error"] = "Memories not supported by this radio";
+            sendJsonTo(client, err);
+            return;
+        }
+        int start = cmd.contains("start") ? cmd["start"].toInt() : 1;
+        int end = cmd.contains("end") ? cmd["end"].toInt() : 99;
+        int group = cmd.contains("group") ? cmd["group"].toInt() : 0;
+        memories.clear();
+        memoryScanActive = true;
+        memoryScanCurrent = start;
+        memoryScanEnd = end;
+        memoryScanGroup = group;
+        // Initialize scan timer on first use
+        if (!memoryScanTimer) {
+            memoryScanTimer = new QTimer(this);
+            memoryScanTimer->setSingleShot(true);
+            memoryScanTimer->setInterval(500);
+            connect(memoryScanTimer, &QTimer::timeout, this, &webServer::scanNextMemory);
+        }
+        // Request first channel
+        uint val = (uint(group) << 16) | uint(start);
+        queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<uint>(val), false, 0));
+        memoryScanTimer->start();
+    }
+    else if (type == "recallMemory") {
+        if (!queue || !rigCaps) return;
+        int ch = cmd["channel"].toInt();
+        int group = cmd.contains("group") ? cmd["group"].toInt() : 0;
+        uint val = (uint(group) << 16) | uint(ch);
+        queue->addUnique(priorityImmediate, queueItem(funcMemoryToVFO, QVariant::fromValue<uint>(val), false, 0));
+    }
+    else if (type == "writeMemory") {
+        if (!queue || !rigCaps) return;
+        int ch = cmd["channel"].toInt();
+        int group = cmd.contains("group") ? cmd["group"].toInt() : 0;
+        if (ch <= 0) return;
+        // Build memoryType from current VFO state
+        memoryType mem;
+        mem.channel = ch;
+        mem.group = group;
+        mem.del = false;
+        mem.split = 0;
+        mem.skip = 0;
+        mem.scan = 0;
+        memset(mem.name, ' ', sizeof(mem.name) - 1);
+        mem.name[sizeof(mem.name) - 1] = '\0';
+        // Get current frequency
+        vfoCommandType tA = queue->getVfoCommand(vfoA, 0, false);
+        cacheItem freqCache = queue->getCache(tA.freqFunc, 0);
+        if (freqCache.value.isValid()) {
+            mem.frequency = freqCache.value.value<freqt>();
+        }
+        // Get current mode
+        cacheItem modeCache = queue->getCache(tA.modeFunc, 0);
+        if (modeCache.value.isValid()) {
+            modeInfo m = modeCache.value.value<modeInfo>();
+            mem.mode = m.reg;
+            mem.filter = m.filter > 0 ? m.filter : 1;
+            mem.datamode = m.data == 0xff ? 0 : m.data;
+        } else {
+            mem.mode = 1; // USB
+            mem.filter = 1;
+            mem.datamode = 0;
+        }
+        // Copy VFO A data to VFO B (required by IC-7300 memory format)
+        mem.frequencyB = mem.frequency;
+        mem.modeB = mem.mode;
+        mem.filterB = mem.filter;
+        mem.datamodeB = mem.datamode;
+        mem.tonemodeB = mem.tonemode;
+        mem.toneB = mem.tone;
+        mem.tsqlB = mem.tsql;
+        mem.dtcsB = mem.dtcs;
+        mem.dtcspB = mem.dtcsp;
+        queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<memoryType>(mem), false, 0));
+    }
+    else if (type == "clearMemory") {
+        if (!queue || !rigCaps) return;
+        int ch = cmd["channel"].toInt();
+        int group = cmd.contains("group") ? cmd["group"].toInt() : 0;
+        if (ch <= 0) return;
+        // Write a deleted/empty memory via funcMemoryContents (same path as writeMemory)
+        memoryType mem;
+        mem.channel = ch;
+        mem.group = group;
+        mem.del = true;
+        mem.split = 0;
+        mem.skip = 0;
+        mem.scan = 0;
+        memset(mem.name, 0, sizeof(mem.name));
+        memset(mem.UR, 0, sizeof(mem.UR));
+        memset(mem.URB, 0, sizeof(mem.URB));
+        memset(mem.R1, 0, sizeof(mem.R1));
+        memset(mem.R2, 0, sizeof(mem.R2));
+        memset(mem.R1B, 0, sizeof(mem.R1B));
+        memset(mem.R2B, 0, sizeof(mem.R2B));
+        qCInfo(logWebServer) << "clearMemory: channel=" << ch << "group=" << group;
+        memoryScanActive = false; // Prevent scan from interfering
+        queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<memoryType>(mem), false, 0));
+        quint32 key = (quint32(group) << 16) | ch;
+        memories.remove(key);
     }
     else {
         qWarning() << "Web: Unknown command:" << type;
@@ -1859,6 +2028,35 @@ void webServer::receiveCache(cacheItem item)
         rigPoweredOn = item.value.toBool();
         update["powerState"] = rigPoweredOn;
         break;
+    case funcMemoryContents:
+    {
+        // Only process actual memory data from the radio (memoryType),
+        // not our own queued request values (uint) echoed back via cache.
+        if (strcmp(item.value.typeName(), "memoryType") != 0) {
+            return;
+        }
+        memoryType mem = item.value.value<memoryType>();
+        quint32 key = (quint32(mem.group) << 16) | mem.channel;
+        if (mem.del || (mem.frequency.Hz == 0 && mem.mode == 0)) {
+            memories.remove(key);
+        } else {
+            memories[key] = mem;
+        }
+        // Stop scan timer since we got a response
+        if (memoryScanTimer) memoryScanTimer->stop();
+        // Broadcast to clients (only non-empty channels)
+        if (!mem.del && (mem.frequency.Hz != 0 || mem.mode != 0)) {
+            QJsonObject memUpdate;
+            memUpdate["type"] = "memoryChannel";
+            memUpdate["memory"] = memoryToJson(mem);
+            sendJsonToAll(memUpdate);
+        }
+        // Continue scan if active (but not for our own write/delete echoed back)
+        if (memoryScanActive && !mem.del) {
+            scanNextMemory();
+        }
+        return; // Don't send as generic update
+    }
     default:
         return; // Don't send updates for unhandled funcs
     }
@@ -1967,6 +2165,67 @@ modeInfo webServer::stringToMode(const QString &mode)
         }
     }
     return m;
+}
+
+// --- Memory Channels ---
+
+QString webServer::modeRegToString(quint8 reg)
+{
+    if (rigCaps) {
+        for (const modeInfo &mi : rigCaps->modes) {
+            if (mi.reg == reg) return mi.name;
+        }
+    }
+    return QString("?%1").arg(reg);
+}
+
+QJsonObject webServer::memoryToJson(const memoryType &mem)
+{
+    QJsonObject o;
+    o["group"] = mem.group;
+    o["channel"] = mem.channel;
+    o["frequency"] = (qint64)mem.frequency.Hz;
+    o["mode"] = modeRegToString(mem.mode);
+    o["modeReg"] = mem.mode;
+    o["filter"] = mem.filter;
+    o["name"] = QString::fromLatin1(mem.name).trimmed();
+    o["duplex"] = mem.duplex;
+    o["split"] = (int)mem.split;
+    o["tonemode"] = mem.tonemode;
+    o["tone"] = mem.tone;
+    o["tsql"] = mem.tsql;
+    o["skip"] = mem.skip;
+    o["del"] = mem.del;
+    if (mem.frequency.Hz == 0 && mem.mode == 0) {
+        o["empty"] = true;
+    }
+    // Include VFO B data if split
+    if (mem.split) {
+        o["frequencyB"] = (qint64)mem.frequencyB.Hz;
+        o["modeB"] = modeRegToString(mem.modeB);
+    }
+    return o;
+}
+
+void webServer::scanNextMemory()
+{
+    memoryScanCurrent++;
+    if (memoryScanCurrent > memoryScanEnd || !queue) {
+        memoryScanActive = false;
+        if (memoryScanTimer) memoryScanTimer->stop();
+        QJsonObject done;
+        done["type"] = "memoryScanComplete";
+        int count = 0;
+        for (auto &m : memories) {
+            if (!m.del) count++;
+        }
+        done["count"] = count;
+        sendJsonToAll(done);
+        return;
+    }
+    uint val = (uint(memoryScanGroup) << 16) | uint(memoryScanCurrent);
+    queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<uint>(val), false, 0));
+    if (memoryScanTimer) memoryScanTimer->start();
 }
 
 // --- Audio Streaming ---
