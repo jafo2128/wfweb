@@ -4,11 +4,11 @@
 
 wfweb turns your transceiver into a web-accessible station. Waterfall, audio, CW decoding, FT8/FT4 — all in the browser, no client software required.
 
-![FT8 digital mode panel](ft8.jpg)
+![FT8 digital mode panel](ft8.png)
 
-![SSB mode](ssb.jpg)
+![SSB mode](ssb.png)
 
-![CW mode with decoder](cw.jpg)
+![CW mode with decoder](cw.png)
 
 ---
 
