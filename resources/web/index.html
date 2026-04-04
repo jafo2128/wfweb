@@ -4183,14 +4183,7 @@ function updatePowerState(on) {
 // ============================================================
 function toggleFreeDV() {
     if (freedvEnabled) {
-        // Cycle to next mode; disable after last
-        var idx = freedvModes.indexOf(freedvModeName);
-        if (idx >= 0 && idx < freedvModes.length - 1) {
-            freedvModeName = freedvModes[idx + 1];
-            send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
-        } else {
-            send({ cmd: 'setFreeDV', enabled: false });
-        }
+        send({ cmd: 'setFreeDV', enabled: false });
     } else {
         freedvModeName = freedvModes[0];
         freedvTxGain = 0.25;
@@ -4198,6 +4191,16 @@ function toggleFreeDV() {
         send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
         send({ cmd: 'setFreeDVTxGain', value: freedvTxGain });
     }
+}
+
+function cycleFreeDVMode() {
+    if (!freedvEnabled) return;
+    var idx = freedvModes.indexOf(freedvModeName);
+    freedvModeName = freedvModes[(idx + 1) % freedvModes.length];
+    freedvTxGain = 0.25;
+    ALC_SMOOTHED = 0;
+    send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
+    send({ cmd: 'setFreeDVTxGain', value: freedvTxGain });
 }
 
 function updateFreeDVStatus(msg) {
@@ -4219,8 +4222,7 @@ function updateFreeDVStatus(msg) {
         indicator = document.createElement('div');
         indicator.id = 'freedvIndicator';
         indicator.className = 'spectrum-warning';
-        indicator.style.cssText = 'right:8px; left:auto; top:8px; bottom:auto; cursor:pointer; font-size:11px; padding:2px 8px;';
-        indicator.onclick = function() { toggleFreeDV(); };
+        indicator.style.cssText = 'right:8px; left:auto; top:8px; bottom:auto; font-size:11px; padding:2px 8px; user-select:none; display:flex; align-items:center; gap:6px; white-space:nowrap;';
         var specArea = document.getElementById('scopeArea');
         if (specArea) specArea.appendChild(indicator);
     }
@@ -4228,8 +4230,28 @@ function updateFreeDVStatus(msg) {
     if (freedvEnabled) {
         var syncColor = freedvSync ? '#00ff88' : '#ff4444';
         var snrText = freedvSNR.toFixed(1);
-        indicator.innerHTML = 'FreeDV ' + freedvModeName + ' <span style="color:' + syncColor + '">' + (freedvSync ? 'SYNC' : 'NO SYNC') + '</span> SNR: ' + snrText + ' dB';
-        indicator.style.display = '';
+        indicator.innerHTML = '<span id="freedvModeLink" style="cursor:pointer; text-decoration:underline; min-width:72px; display:inline-block;">FreeDV ' + freedvModeName + '</span>'
+            + '<span style="color:' + syncColor + '; width:52px; display:inline-block; text-align:center;">' + (freedvSync ? 'SYNC' : 'NO SYNC') + '</span>'
+            + '<span style="width:62px; display:inline-block; text-align:right;">SNR ' + snrText + '</span>'
+            + '<span id="freedvMonBtn" style="cursor:pointer; padding:1px 5px; border:1px solid #666; border-radius:3px; font-size:10px;">MON</span>';
+        indicator.style.display = 'flex';
+        // Mode cycle on click
+        var modeLink = document.getElementById('freedvModeLink');
+        if (modeLink) modeLink.onclick = function(e) { e.stopPropagation(); cycleFreeDVMode(); };
+        // Monitor: bypass FreeDV decoding while pressed
+        var monBtn = document.getElementById('freedvMonBtn');
+        if (monBtn) {
+            monBtn.onmousedown = monBtn.ontouchstart = function(e) {
+                e.preventDefault(); e.stopPropagation();
+                send({ cmd: 'setFreeDVMonitor', value: true });
+                monBtn.style.background = '#0aa'; monBtn.style.color = '#000';
+            };
+            monBtn.onmouseup = monBtn.onmouseleave = monBtn.ontouchend = monBtn.ontouchcancel = function(e) {
+                e.stopPropagation();
+                send({ cmd: 'setFreeDVMonitor', value: false });
+                monBtn.style.background = ''; monBtn.style.color = '';
+            };
+        }
     } else {
         indicator.style.display = 'none';
     }

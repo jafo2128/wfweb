@@ -1522,6 +1522,10 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
                 usbAudioOutputDevice = nullptr;
                 preTxBuffer.clear();
                 preTxBuffering = true;
+                // Reset FreeDV TX state so onFreeDVTxReady() will restart ALSA
+                freedvTxBuffer.clear();
+                freedvTxActive = false;
+                if (freedvTxDrainTimer) freedvTxDrainTimer->stop();
             }
         } else {
             // Restore previous DATA MOD OFF setting
@@ -1716,6 +1720,9 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
     else if (type == "setFreeDVTxGain") {
         float gain = (float)cmd["value"].toDouble();
         freedvTxGain = qBound(0.01f, gain, 1.0f);
+    }
+    else if (type == "setFreeDVMonitor") {
+        freedvMonitor = cmd["value"].toBool();
     }
     else {
         qWarning() << "Web: Unknown command:" << type;
@@ -2429,7 +2436,7 @@ void webServer::setupAudio(quint8 codec, quint32 sampleRate)
 void webServer::receiveRxAudio(audioPacket audio)
 {
     if (audioClients.isEmpty() || !audioConfigured) return;
-    if (freedvEnabled) {
+    if (freedvEnabled && !freedvMonitor) {
         emit sendToFreeDVRx(audio);
     } else {
         emit sendToConverter(audio);
@@ -2863,7 +2870,8 @@ void webServer::readUsbAudio()
     // FreeDV RX path: decode modem tones before sending to browser.
     // This also works during TX when the radio's MONITOR is on,
     // providing a loopback test of the full TX/RX chain.
-    if (freedvEnabled) {
+    // When freedvMonitor is set, bypass decoding to hear raw SSB.
+    if (freedvEnabled && !freedvMonitor) {
         audioPacket pkt;
         pkt.data = data;
         pkt.time = QTime::currentTime();
