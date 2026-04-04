@@ -222,6 +222,7 @@ private:
     QByteArray freedvTxBuffer;
     QTimer *freedvTxDrainTimer = nullptr;
     bool freedvTxActive = false;  // true once ALSA restarted for FreeDV TX
+    float freedvTxGain = 0.25f;   // ALC-controlled gain applied to modem output
 
     // Memory channel scanning
     QMap<quint32, memoryType> memories;  // key = (group << 16) | channel

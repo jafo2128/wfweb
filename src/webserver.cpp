@@ -1685,6 +1685,7 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
             int mode = -1;
             if (modeName == "700D") mode = FREEDV_MODE_700D;
             else if (modeName == "700E") mode = FREEDV_MODE_700E;
+            else if (modeName == "1600") mode = FREEDV_MODE_1600;
             if (mode >= 0) {
                 freedvModeName = modeName;
                 freedvEnabled = true;
@@ -1711,6 +1712,10 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         notify["freedvSync"] = freedvSync;
         notify["freedvSNR"] = (double)freedvSNR;
         sendJsonToAll(notify);
+    }
+    else if (type == "setFreeDVTxGain") {
+        float gain = (float)cmd["value"].toDouble();
+        freedvTxGain = qBound(0.01f, gain, 1.0f);
     }
     else {
         qWarning() << "Web: Unknown command:" << type;
@@ -2468,6 +2473,14 @@ void webServer::onFreeDVTxReady(audioPacket audio)
             }
         } else {
             writeData = audio.data;
+        }
+
+        // Apply ALC-controlled gain to modem output
+        if (freedvTxGain < 0.99f) {
+            qint16 *samples = reinterpret_cast<qint16 *>(writeData.data());
+            int count = writeData.size() / (int)sizeof(qint16);
+            for (int i = 0; i < count; i++)
+                samples[i] = qBound((int)-32768, (int)(samples[i] * freedvTxGain), (int)32767);
         }
 
         // Accumulate modem output; drain timer feeds ALSA at a steady rate

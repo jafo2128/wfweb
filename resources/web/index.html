@@ -2403,8 +2403,10 @@ var audioSampleRate = 48000;
 // FreeDV state
 var freedvEnabled = false;
 var freedvModeName = '700D';
+var freedvModes = ['700D', '700E', '1600'];
 var freedvSync = false;
 var freedvSNR = 0.0;
+var freedvTxGain = 0.25;       // FreeDV mic gain multiplier (same ALC logic as FT8)
 
 var micEnabled = false;
 var txAudioAvailable = false;
@@ -3191,16 +3193,25 @@ function updateSwrMeter(val) { swrVal = val; if (isTransmitting) drawMeter(); }
 function updateALCMeter(val) {
     alcVal = val;
     if (isTransmitting) drawMeter();
-    // Smooth proportional ALC control for FT8/FT4 — keeps power stable
-    if ((digiTxActive || digiTuneActive) && isTransmitting) {
+    // Smooth proportional ALC control — keeps power stable
+    var alcActive = (digiTxActive || digiTuneActive || (freedvEnabled && micEnabled)) && isTransmitting;
+    if (alcActive) {
         ALC_SMOOTHED = ALC_SMOOTHED * (1 - ALC_EMA_ALPHA) + alcVal * ALC_EMA_ALPHA;
         var error = ALC_SMOOTHED - ALC_TARGET;
-        if (error > ALC_DEAD_ZONE) {
-            // Over target: reduce gain proportionally to overshoot
-            digiTxGain = Math.max(ALC_MIN_GAIN, digiTxGain * (1 - ALC_GAIN_DOWN * error));
-        } else if (error < -ALC_DEAD_ZONE && digiTxGain < 0.5) {
-            // Under target: increase gain very slowly (cap at 0.5 — never need more)
-            digiTxGain = Math.min(0.5, digiTxGain * (1 + ALC_GAIN_UP));
+        if (digiTxActive || digiTuneActive) {
+            if (error > ALC_DEAD_ZONE)
+                digiTxGain = Math.max(ALC_MIN_GAIN, digiTxGain * (1 - ALC_GAIN_DOWN * error));
+            else if (error < -ALC_DEAD_ZONE && digiTxGain < 0.5)
+                digiTxGain = Math.min(0.5, digiTxGain * (1 + ALC_GAIN_UP));
+        }
+        if (freedvEnabled && micEnabled) {
+            var prevGain = freedvTxGain;
+            if (error > ALC_DEAD_ZONE)
+                freedvTxGain = Math.max(ALC_MIN_GAIN, freedvTxGain * (1 - ALC_GAIN_DOWN * error));
+            else if (error < -ALC_DEAD_ZONE && freedvTxGain < 0.5)
+                freedvTxGain = Math.min(0.5, freedvTxGain * (1 + ALC_GAIN_UP));
+            if (Math.abs(freedvTxGain - prevGain) > 0.001)
+                send({ cmd: 'setFreeDVTxGain', value: freedvTxGain });
         }
     }
 }
@@ -3399,8 +3410,8 @@ function drawTxMeters(ctx, cw, ch, barX, barW, segW, segGap, segX, labelW) {
         segW: segW, segGap: segGap, segX: segX
     });
 
-    // ALC indicator — visible during DIGI TX
-    if (digiTxActive || digiTuneActive) {
+    // ALC indicator — visible during DIGI TX or FreeDV TX
+    if (digiTxActive || digiTuneActive || (freedvEnabled && micEnabled && isTransmitting)) {
         var alcPct = Math.round(alcVal * 100);
         var alcColor = alcVal > 0.05 ? '#ff4444' : '#44cc44';
         var alcText = 'ALC ' + alcPct + '%';
@@ -4172,10 +4183,20 @@ function updatePowerState(on) {
 // ============================================================
 function toggleFreeDV() {
     if (freedvEnabled) {
-        send({ cmd: 'setFreeDV', enabled: false });
+        // Cycle to next mode; disable after last
+        var idx = freedvModes.indexOf(freedvModeName);
+        if (idx >= 0 && idx < freedvModes.length - 1) {
+            freedvModeName = freedvModes[idx + 1];
+            send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
+        } else {
+            send({ cmd: 'setFreeDV', enabled: false });
+        }
     } else {
-        // Cycle through modes or enable with current mode
+        freedvModeName = freedvModes[0];
+        freedvTxGain = 0.25;
+        ALC_SMOOTHED = 0;
         send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
+        send({ cmd: 'setFreeDVTxGain', value: freedvTxGain });
     }
 }
 
