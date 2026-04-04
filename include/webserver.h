@@ -231,7 +231,11 @@ private:
     QThread *freedvThread = nullptr;
     bool freedvEnabled = false;
     int freedvMode = 0;
-    QString freedvModeName;
+#ifdef RADE_SUPPORT
+    QString freedvModeName = QStringLiteral("RADE");
+#else
+    QString freedvModeName = QStringLiteral("700D");
+#endif
     float freedvSNR = 0.0f;
     bool freedvSync = false;
     QByteArray freedvTxBuffer;

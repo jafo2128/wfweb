@@ -2766,6 +2766,26 @@ function handleMessage(msg) {
             if (msg.powerMeter !== undefined) updatePowerMeter(msg.powerMeter);
             if (msg.swrMeter !== undefined) updateSwrMeter(msg.swrMeter);
             if (msg.alcMeter !== undefined) updateALCMeter(msg.alcMeter);
+            if (msg.freedvSync !== undefined || msg.freedvSNR !== undefined) {
+                // Update stats values directly — avoid full updateFreeDVStatus
+                // which re-renders overlays and interferes with button clicks
+                if (msg.freedvSync !== undefined) freedvSync = msg.freedvSync;
+                if (msg.freedvSNR !== undefined) freedvSNR = msg.freedvSNR;
+                if (msg.freedvFreqOffset !== undefined) freedvFreqOffset = msg.freedvFreqOffset;
+                // Redraw just the spectrum indicator
+                var ind = document.getElementById('freedvIndicator');
+                if (ind && freedvEnabled) {
+                    var sc = freedvSync ? '#00ff88' : '#ff4444';
+                    var syncEl = ind.querySelector('span:nth-child(2)');
+                    var snrEl = ind.querySelector('span:nth-child(3)');
+                    if (syncEl) { syncEl.style.color = sc; syncEl.textContent = freedvSync ? 'SYNC' : 'NO SYNC'; }
+                    if (snrEl) snrEl.textContent = 'SNR ' + freedvSNR.toFixed(1);
+                    if (freedvModeName === 'RADE') {
+                        var foEl = ind.querySelector('span:nth-child(4)');
+                        if (foEl) foEl.textContent = 'FO ' + freedvFreqOffset.toFixed(1);
+                    }
+                }
+            }
             break;
         case 'memoryChannel':
             handleMemoryChannel(msg);

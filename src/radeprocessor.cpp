@@ -53,7 +53,7 @@ bool RadeProcessor::init(quint32 radioSampleRate)
     // Initialize RADE global state (safe to call multiple times)
     rade_initialize();
 
-    r = rade_open(NULL, RADE_USE_C_ENCODER | RADE_USE_C_DECODER);
+    r = rade_open(NULL, RADE_USE_C_ENCODER | RADE_USE_C_DECODER | RADE_VERBOSE_0);
     if (!r) {
         qWarning() << "RADE: failed to open";
         return false;
@@ -320,9 +320,9 @@ void RadeProcessor::processRx(audioPacket audio)
             }
         }
 
-        // Emit stats
+        // Emit stats (report -5 dB when not synced, like other FreeDV modes)
         bool sync = rade_sync(r) != 0;
-        float snr = (float)rade_snrdB_3k_est(r);
+        float snr = sync ? (float)rade_snrdB_3k_est(r) : -5.0f;
         float foff = rade_freq_offset(r);
         emit statsUpdate(snr, sync, foff);
 

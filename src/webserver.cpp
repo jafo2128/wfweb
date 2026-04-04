@@ -69,6 +69,7 @@ webServer::~webServer()
     }
 #ifdef RADE_SUPPORT
     if (radeThread) {
+        if (radeProcessor) radeProcessor->stopRequested.store(true);
         radeThread->quit();
         radeThread->wait();
     }
@@ -1795,12 +1796,12 @@ QJsonObject webServer::buildInfoJson() const
         }
         info["txAudioAvailable"] = txAudioConfigured;
         QJsonArray fdvModes;
-        fdvModes.append("700D");
-        fdvModes.append("700E");
-        fdvModes.append("1600");
 #ifdef RADE_SUPPORT
         fdvModes.append("RADE");
 #endif
+        fdvModes.append("700D");
+        fdvModes.append("700E");
+        fdvModes.append("1600");
         info["freedvModes"] = fdvModes;
         info["hasFilterSettings"] = rigCaps->commands.contains(funcPBTInner);
         info["hasPowerControl"] = rigCaps->commands.contains(funcPowerControl);
@@ -2232,6 +2233,16 @@ void webServer::sendPeriodicStatus()
     cacheItem txStatus = queue->getCache(funcTransceiverStatus, 0);
     if (txStatus.value.isValid()) {
         status["transmitting"] = txStatus.value.toBool();
+    }
+
+    // Include FreeDV/RADE stats when active (5Hz update rate)
+    if (freedvEnabled) {
+        status["freedvSync"] = freedvSync;
+        status["freedvSNR"] = (double)freedvSNR;
+#ifdef RADE_SUPPORT
+        if (freedvModeName == "RADE")
+            status["freedvFreqOffset"] = (double)freedvFreqOffset;
+#endif
     }
 
     sendJsonToAll(status);
