@@ -1190,6 +1190,17 @@ void webServer::onWsDisconnected()
             micActiveClient = nullptr;
             qInfo() << "Web: Restored DATA MOD OFF setting (client disconnected)";
         }
+        // Stop FreeDV/RADE TX drain to prevent ALSA underruns
+        if (freedvTxActive) {
+            freedvTxBuffer.clear();
+            freedvTxActive = false;
+            if (freedvTxDrainTimer) freedvTxDrainTimer->stop();
+            txAudioActive = false;
+            if (usbAudioOutput) {
+                usbAudioOutput->stop();
+                usbAudioOutputDevice = nullptr;
+            }
+        }
         audioClients.remove(pClient);
         wsClients.removeAll(pClient);
         pClient->deleteLater();
