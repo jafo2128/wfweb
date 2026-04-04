@@ -179,15 +179,32 @@ isEmpty(RADAE_DIR): RADAE_DIR = $$(RADAE_DIR)
 isEmpty(RADAE_DIR): exists($$PWD/radae_nopy/src/rade_api.h): RADAE_DIR = $$PWD/radae_nopy
 !isEmpty(RADAE_DIR) {
     isEmpty(RADAE_BUILD): RADAE_BUILD = $$RADAE_DIR/build
-    exists($$RADAE_BUILD/src/librade.so) | exists($$RADAE_BUILD/src/librade.dylib) {
+    exists($$RADAE_BUILD/src/librade.so) | exists($$RADAE_BUILD/src/librade.dylib) | exists($$RADAE_BUILD/build_opus-prefix/src/build_opus/.libs/libopus.a) {
         DEFINES += RADE_SUPPORT
         INCLUDEPATH += $$RADAE_DIR/src
         # Custom Opus headers (LPCNet/FARGAN) from the CMake ExternalProject
         OPUS_SRC = $$RADAE_BUILD/build_opus-prefix/src/build_opus
         INCLUDEPATH += $$OPUS_SRC/dnn $$OPUS_SRC/celt $$OPUS_SRC/include $$OPUS_SRC
-        LIBS += -L$$RADAE_BUILD/src -lrade
-        QMAKE_RPATHDIR += $$RADAE_BUILD/src
-        macx:QMAKE_RPATHDIR += @executable_path
+        macx {
+            # macOS: compile rade sources directly into the binary (no dylib to sign)
+            DEFINES += IS_BUILDING_RADE_API=1 RADE_PYTHON_FREE=1
+            SOURCES += \
+                $$RADAE_DIR/src/rade_api_nopy.c \
+                $$RADAE_DIR/src/rade_enc.c \
+                $$RADAE_DIR/src/rade_dec.c \
+                $$RADAE_DIR/src/rade_enc_data.c \
+                $$RADAE_DIR/src/rade_dec_data.c \
+                $$RADAE_DIR/src/rade_dsp.c \
+                $$RADAE_DIR/src/rade_ofdm.c \
+                $$RADAE_DIR/src/rade_bpf.c \
+                $$RADAE_DIR/src/rade_acq.c \
+                $$RADAE_DIR/src/rade_tx.c \
+                $$RADAE_DIR/src/rade_rx.c
+        } else {
+            # Linux/Windows: link shared library
+            LIBS += -L$$RADAE_BUILD/src -lrade
+            QMAKE_RPATHDIR += $$RADAE_BUILD/src
+        }
         # Custom Opus (with LPCNet/FARGAN) built by radae_nopy - link statically
         LIBS += $$RADAE_BUILD/build_opus-prefix/src/build_opus/.libs/libopus.a
         SOURCES += src/radeprocessor.cpp

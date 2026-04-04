@@ -382,15 +382,7 @@ jobs:
           cp wfweb wfweb-macos-arm64/
           cp -r rigs wfweb-macos-arm64/
           cp LICENSE THIRD_PARTY_LICENSES wfweb-macos-arm64/
-          # Bundle librade for distribution (rpath @executable_path set at build time)
-          if [ -f radae_nopy/build/src/librade.dylib ]; then
-            cp radae_nopy/build/src/librade*.dylib wfweb-macos-arm64/
-          fi
-          # Ad-hoc sign after all files are in place so Gatekeeper accepts the download
-          codesign --force --sign - wfweb-macos-arm64/wfweb
-          for lib in wfweb-macos-arm64/*.dylib; do
-            [ -f "$lib" ] && codesign --force --sign - "$lib"
-          done
+          # RADE is compiled directly into the binary on macOS (no dylibs needed)
           zip -r wfweb-macos-arm64.zip wfweb-macos-arm64
 
       - name: Upload artifact
