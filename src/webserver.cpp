@@ -1,5 +1,8 @@
 #include "webserver.h"
+#include "freedvprocessor.h"
 #include "logcategories.h"
+
+#include <codec2/freedv_api.h>
 
 #include <QStandardPaths>
 #include <QDir>
@@ -56,6 +59,13 @@ webServer::~webServer()
         usbAudioInput->stop();
         delete usbAudioInput;
         usbAudioInput = nullptr;
+    }
+    if (freedvTxDrainTimer) {
+        freedvTxDrainTimer->stop();
+    }
+    if (freedvThread) {
+        freedvThread->quit();
+        freedvThread->wait();
     }
     if (txConverterThread) {
         txConverterThread->quit();
@@ -1190,6 +1200,16 @@ void webServer::onWsBinaryMessage(QByteArray message)
     QByteArray pcmData = message.mid(6);
     if (pcmData.isEmpty()) return;
 
+    if (freedvEnabled) {
+        audioPacket pkt;
+        pkt.data = pcmData;
+        pkt.time = QTime::currentTime();
+        pkt.sent = 0;
+        pkt.volume = 1.0;
+        emit sendToFreeDVTx(pkt);
+        return;
+    }
+
     if (usbAudioOutput && txAudioConfigured) {
         // USB path
         // Expand mono → stereo if the device requires it
@@ -1213,8 +1233,7 @@ void webServer::onWsBinaryMessage(QByteArray message)
             // with a full buffer rather than an empty one, providing a real jitter
             // absorber instead of racing the drain rate from the first byte.
             preTxBuffer.append(writeData);
-            int bufSize = usbAudioOutput->bufferSize();
-            if (bufSize <= 0) bufSize = 9600; // fallback if not yet started
+            int bufSize = 9600; // ~100ms at 48kHz mono 16-bit
             if (preTxBuffer.size() >= bufSize) {
                 preTxBuffering = false;
                 usbAudioOutputDevice = usbAudioOutput->start();
@@ -1514,6 +1533,9 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
             micActiveClient = nullptr;
             preTxBuffering = false;
             preTxBuffer.clear();
+            freedvTxBuffer.clear();
+            freedvTxActive = false;
+            if (freedvTxDrainTimer) freedvTxDrainTimer->stop();
             txAudioActive = false;
             if (usbAudioOutput) {
                 usbAudioOutput->stop();
@@ -1655,6 +1677,40 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
         queue->addUnique(priorityImmediate, queueItem(funcMemoryContents, QVariant::fromValue<memoryType>(mem), false, 0));
         quint32 key = (quint32(group) << 16) | ch;
         memories.remove(key);
+    }
+    else if (type == "setFreeDV") {
+        bool enable = cmd["enabled"].toBool();
+        QString modeName = cmd["mode"].toString();
+            if (enable && freedvProcessor && audioConfigured) {
+            int mode = -1;
+            if (modeName == "700D") mode = FREEDV_MODE_700D;
+            else if (modeName == "700E") mode = FREEDV_MODE_700E;
+            if (mode >= 0) {
+                freedvModeName = modeName;
+                freedvEnabled = true;
+                emit setupFreeDV(mode, rigSampleRate);
+                qInfo() << "Web: FreeDV enabled, mode=" << modeName;
+            }
+        } else {
+            freedvEnabled = false;
+            freedvSync = false;
+            freedvSNR = 0.0f;
+            freedvTxBuffer.clear();
+            freedvTxActive = false;
+            if (freedvTxDrainTimer) freedvTxDrainTimer->stop();
+            if (freedvProcessor) {
+                QMetaObject::invokeMethod(freedvProcessor, "cleanup", Qt::QueuedConnection);
+            }
+            qInfo() << "Web: FreeDV disabled";
+        }
+        // Notify all clients
+        QJsonObject notify;
+        notify["type"] = "freedvStatus";
+        notify["enabled"] = freedvEnabled;
+        notify["freedvMode"] = freedvModeName;
+        notify["freedvSync"] = freedvSync;
+        notify["freedvSNR"] = (double)freedvSNR;
+        sendJsonToAll(notify);
     }
     else {
         qWarning() << "Web: Unknown command:" << type;
@@ -1815,6 +1871,14 @@ QJsonObject webServer::buildStatusJson()
         rigPoweredOn = powerState.value.toBool();
     }
     status["powerState"] = rigPoweredOn;
+
+    // FreeDV
+    status["freedv"] = freedvEnabled;
+    if (freedvEnabled) {
+        status["freedvMode"] = freedvModeName;
+        status["freedvSync"] = freedvSync;
+        status["freedvSNR"] = (double)freedvSNR;
+    }
 
     // AF Gain
     cacheItem afGain = queue->getCache(funcAfGain, 0);
@@ -2326,6 +2390,23 @@ void webServer::setupAudio(quint8 codec, quint32 sampleRate)
 
     txAudioConfigured = true;
     audioConfigured = true;
+
+    // FreeDV processor thread (created once, activated on demand)
+    freedvProcessor = new FreeDVProcessor();
+    freedvThread = new QThread(this);
+    freedvThread->setObjectName("webFreeDV()");
+    freedvProcessor->moveToThread(freedvThread);
+
+    connect(this, &webServer::setupFreeDV, freedvProcessor, &FreeDVProcessor::init);
+    connect(this, &webServer::sendToFreeDVRx, freedvProcessor, &FreeDVProcessor::processRx);
+    connect(this, &webServer::sendToFreeDVTx, freedvProcessor, &FreeDVProcessor::processTx);
+    connect(freedvProcessor, &FreeDVProcessor::rxReady, this, &webServer::onFreeDVRxReady);
+    connect(freedvProcessor, &FreeDVProcessor::txReady, this, &webServer::onFreeDVTxReady);
+    connect(freedvProcessor, &FreeDVProcessor::statsUpdate, this, &webServer::onFreeDVStats);
+    connect(freedvThread, &QThread::finished, freedvProcessor, &QObject::deleteLater);
+
+    freedvThread->start();
+
     qInfo() << "Web: Audio configured, codec=" << Qt::hex << codec
             << "sampleRate=" << Qt::dec << sampleRate;
 
@@ -2343,7 +2424,123 @@ void webServer::setupAudio(quint8 codec, quint32 sampleRate)
 void webServer::receiveRxAudio(audioPacket audio)
 {
     if (audioClients.isEmpty() || !audioConfigured) return;
-    emit sendToConverter(audio);
+    if (freedvEnabled) {
+        emit sendToFreeDVRx(audio);
+    } else {
+        emit sendToConverter(audio);
+    }
+}
+
+void webServer::onFreeDVRxReady(audioPacket audio)
+{
+    if (rxConverter) {
+        // LAN path: feed into converter
+        emit sendToConverter(audio);
+    } else {
+        // USB path: send directly to browser clients
+        quint16 rateDiv = static_cast<quint16>(rigSampleRate / 1000);
+        QByteArray msg;
+        int headerSize = 6;
+        msg.resize(headerSize + audio.data.size());
+        msg[0] = 0x02;
+        msg[1] = 0x00;
+        quint16 seq = audioSeq++;
+        memcpy(msg.data() + 2, &seq, 2);
+        memcpy(msg.data() + 4, &rateDiv, 2);
+        memcpy(msg.data() + headerSize, audio.data.constData(), audio.data.size());
+        sendBinaryToAudioClients(msg);
+    }
+}
+
+void webServer::onFreeDVTxReady(audioPacket audio)
+{
+    if (usbAudioOutput && txAudioConfigured) {
+        // Expand mono → stereo if needed
+        QByteArray writeData;
+        if (usbOutputChannels == 2) {
+            int numSamples = audio.data.size() / 2;
+            writeData.resize(numSamples * 4);
+            const qint16 *src = reinterpret_cast<const qint16 *>(audio.data.constData());
+            qint16 *dst = reinterpret_cast<qint16 *>(writeData.data());
+            for (int i = 0; i < numSamples; i++) {
+                dst[i * 2] = src[i];
+                dst[i * 2 + 1] = src[i];
+            }
+        } else {
+            writeData = audio.data;
+        }
+
+        // Accumulate modem output; drain timer feeds ALSA at a steady rate
+        freedvTxBuffer.append(writeData);
+
+        // Start ALSA and drain timer on first data
+        if (!freedvTxActive) {
+            freedvTxActive = true;
+            // Stop any existing ALSA session (started by normal mic path)
+            if (usbAudioOutput->state() != QAudio::StoppedState)
+                usbAudioOutput->stop();
+            usbAudioOutputDevice = nullptr;
+
+            usbAudioOutputDevice = usbAudioOutput->start();
+            if (usbAudioOutputDevice) {
+                txAudioActive = true;
+                preTxBuffering = false;
+                // Pre-fill ALSA with silence for headroom
+                QByteArray prefill(4800 * usbOutputChannels, 0);  // 50ms
+                usbAudioOutputDevice->write(prefill);
+
+                if (!freedvTxDrainTimer) {
+                    freedvTxDrainTimer = new QTimer(this);
+                    freedvTxDrainTimer->setTimerType(Qt::PreciseTimer);
+                    connect(freedvTxDrainTimer, &QTimer::timeout, this, &webServer::drainFreeDVTxBuffer);
+                }
+                freedvTxDrainTimer->start(10);  // 10ms ticks
+                qInfo() << "Web: FreeDV TX started, ALSA bufSize=" << usbAudioOutput->bufferSize();
+            } else {
+                qWarning() << "Web: FreeDV TX ALSA start() failed";
+                freedvTxActive = false;
+            }
+        }
+    } else if (txConverter) {
+        emit sendToTxConverter(audio);
+    }
+}
+
+void webServer::drainFreeDVTxBuffer()
+{
+    if (!usbAudioOutputDevice) return;
+
+    // Write 10ms per tick (48kHz × 2 bytes × channels × 0.010s)
+    int chunkSize = 960 * usbOutputChannels;  // 960 bytes mono, 1920 stereo
+
+    if (freedvTxBuffer.size() >= chunkSize) {
+        usbAudioOutputDevice->write(freedvTxBuffer.left(chunkSize));
+        freedvTxBuffer.remove(0, chunkSize);
+    } else if (!freedvTxBuffer.isEmpty()) {
+        // Partial data: pad with silence to maintain timing
+        QByteArray chunk = freedvTxBuffer;
+        chunk.append(QByteArray(chunkSize - chunk.size(), 0));
+        usbAudioOutputDevice->write(chunk);
+        freedvTxBuffer.clear();
+    } else {
+        // No data: write silence to keep ALSA fed
+        QByteArray silence(chunkSize, 0);
+        usbAudioOutputDevice->write(silence);
+    }
+}
+
+void webServer::onFreeDVStats(float snr, bool sync)
+{
+    freedvSNR = snr;
+    bool wasSync = freedvSync;
+    freedvSync = sync;
+    if (sync != wasSync) {
+        QJsonObject notify;
+        notify["type"] = "freedvStatus";
+        notify["freedvSync"] = sync;
+        notify["freedvSNR"] = (double)snr;
+        sendJsonToAll(notify);
+    }
 }
 
 void webServer::onRxConverted(audioPacket audio)
@@ -2500,6 +2697,25 @@ void webServer::setupUsbAudio(quint32 sampleRate)
     usbAudioPollTimer->start(20);  // 20ms = 960 samples at 48kHz
 
     audioConfigured = true;
+
+    // FreeDV processor thread (created once, activated on demand)
+    if (!freedvProcessor) {
+        freedvProcessor = new FreeDVProcessor();
+        freedvThread = new QThread(this);
+        freedvThread->setObjectName("webFreeDV()");
+        freedvProcessor->moveToThread(freedvThread);
+
+        connect(this, &webServer::setupFreeDV, freedvProcessor, &FreeDVProcessor::init);
+        connect(this, &webServer::sendToFreeDVRx, freedvProcessor, &FreeDVProcessor::processRx);
+        connect(this, &webServer::sendToFreeDVTx, freedvProcessor, &FreeDVProcessor::processTx);
+        connect(freedvProcessor, &FreeDVProcessor::rxReady, this, &webServer::onFreeDVRxReady);
+        connect(freedvProcessor, &FreeDVProcessor::txReady, this, &webServer::onFreeDVTxReady);
+        connect(freedvProcessor, &FreeDVProcessor::statsUpdate, this, &webServer::onFreeDVStats);
+        connect(freedvThread, &QThread::finished, freedvProcessor, &QObject::deleteLater);
+
+        freedvThread->start();
+    }
+
     qInfo() << "Web: USB audio capture configured, sampleRate=" << rigSampleRate
             << "channels=" << format.channelCount();
 
@@ -2629,6 +2845,20 @@ void webServer::readUsbAudio()
             dst[i] = static_cast<qint16>((static_cast<qint32>(src[i*2]) + src[i*2+1]) / 2);
         }
         data = mono;
+    }
+
+    // FreeDV RX path: decode modem tones before sending to browser.
+    // This also works during TX when the radio's MONITOR is on,
+    // providing a loopback test of the full TX/RX chain.
+    if (freedvEnabled) {
+        audioPacket pkt;
+        pkt.data = data;
+        pkt.time = QTime::currentTime();
+        pkt.seq = audioSeq++;
+        pkt.sent = 0;
+        pkt.volume = 1.0;
+        emit sendToFreeDVRx(pkt);
+        return;
     }
 
     // Build binary message: [0x02][0x00][seq_u16LE][rateDiv_u16LE][PCM_Int16LE...]

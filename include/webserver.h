@@ -31,6 +31,7 @@
 
 #include "cachingqueue.h"
 #include "audioconverter.h"
+#include "freedvprocessor.h"
 
 #ifdef Q_OS_MACOS
 class TlsProxyWorker;
@@ -77,6 +78,9 @@ signals:
                           quint8 opusComplexity, quint8 resampleQuality);
     void sendToTxConverter(audioPacket audio);
     void haveTxAudioData(audioPacket audio);
+    void setupFreeDV(int mode, quint32 radioSampleRate);
+    void sendToFreeDVRx(audioPacket audio);
+    void sendToFreeDVTx(audioPacket audio);
 
 public slots:
     void init(quint16 httpPort, quint16 wsPort);
@@ -109,6 +113,12 @@ private slots:
     // USB audio capture
     void readUsbAudio();
     void onAudioStateChanged(QAudio::State state);
+
+    // FreeDV
+    void onFreeDVRxReady(audioPacket audio);
+    void onFreeDVTxReady(audioPacket audio);
+    void onFreeDVStats(float snr, bool sync);
+    void drainFreeDVTxBuffer();
 
 
 private:
@@ -200,6 +210,18 @@ private:
     rigInput savedDataOffMod;
     bool dataOffModSaved = false;
     QWebSocket *micActiveClient = nullptr;
+
+    // FreeDV processing
+    FreeDVProcessor *freedvProcessor = nullptr;
+    QThread *freedvThread = nullptr;
+    bool freedvEnabled = false;
+    int freedvMode = 0;
+    QString freedvModeName;
+    float freedvSNR = 0.0f;
+    bool freedvSync = false;
+    QByteArray freedvTxBuffer;
+    QTimer *freedvTxDrainTimer = nullptr;
+    bool freedvTxActive = false;  // true once ALSA restarted for FreeDV TX
 
     // Memory channel scanning
     QMap<quint32, memoryType> memories;  // key = (group << 16) | channel

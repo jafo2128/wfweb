@@ -2400,6 +2400,12 @@ var audioAvailable = false;
 var audioWasEnabled = false;
 var audioSampleRate = 48000;
 
+// FreeDV state
+var freedvEnabled = false;
+var freedvModeName = '700D';
+var freedvSync = false;
+var freedvSNR = 0.0;
+
 var micEnabled = false;
 var txAudioAvailable = false;
 var micStream = null;
@@ -2702,6 +2708,7 @@ function handleMessage(msg) {
             if (msg.pbtOuter !== undefined) updateSlider('pbtOuter', msg.pbtOuter);
             if (msg.filterShape !== undefined) updateFilterShapeBtn(msg.filterShape);
             if (msg.powerState !== undefined) updatePowerState(msg.powerState);
+            if (msg.freedv !== undefined) updateFreeDVStatus(msg);
             break;
         case 'update':
             // Handle VFO-specific frequencies if available
@@ -2746,6 +2753,7 @@ function handleMessage(msg) {
             if (msg.pbtOuter !== undefined) updateSlider('pbtOuter', msg.pbtOuter);
             if (msg.filterShape !== undefined) updateFilterShapeBtn(msg.filterShape);
             if (msg.powerState !== undefined) updatePowerState(msg.powerState);
+            if (msg.freedv !== undefined) updateFreeDVStatus(msg);
             break;
         case 'meters':
             if (msg.transmitting !== undefined) updateTxStatus(msg.transmitting);
@@ -2759,6 +2767,9 @@ function handleMessage(msg) {
             break;
         case 'memoryScanComplete':
             handleMemoryScanComplete(msg);
+            break;
+        case 'freedvStatus':
+            updateFreeDVStatus(msg);
             break;
         case 'error':
             console.error('Server error:', msg.message);
@@ -3663,6 +3674,11 @@ function renderFuncOverlay() {
         grid.appendChild(fbtn);
     }
 
+    // FreeDV
+    grid.appendChild(makeFuncBtn('FreeDV', freedvEnabled ? freedvModeName : 'OFF', freedvEnabled, function() {
+        toggleFreeDV();
+    }));
+
     // Memory browser
     grid.appendChild(makeFuncBtn('MEM', '', false, function() {
         openMemoryBrowser();
@@ -4145,6 +4161,56 @@ function updatePowerState(on) {
         }
     }
 }
+// ============================================================
+// FreeDV
+// ============================================================
+function toggleFreeDV() {
+    if (freedvEnabled) {
+        send({ cmd: 'setFreeDV', enabled: false });
+    } else {
+        // Cycle through modes or enable with current mode
+        send({ cmd: 'setFreeDV', enabled: true, mode: freedvModeName });
+    }
+}
+
+function updateFreeDVStatus(msg) {
+    if (msg.enabled !== undefined) freedvEnabled = msg.enabled;
+    if (msg.freedv !== undefined) freedvEnabled = msg.freedv;
+    if (msg.freedvMode !== undefined && msg.freedvMode) freedvModeName = msg.freedvMode;
+    if (msg.freedvSync !== undefined) freedvSync = msg.freedvSync;
+    if (msg.freedvSNR !== undefined) freedvSNR = msg.freedvSNR;
+    // Also handle direct freedvStatus messages (which use short field names)
+    if (msg.type === 'freedvStatus') {
+        if (msg.mode !== undefined && msg.mode) freedvModeName = msg.mode;
+        if (msg.sync !== undefined) freedvSync = msg.sync;
+        if (msg.snr !== undefined) freedvSNR = msg.snr;
+    }
+
+    // Update the FreeDV indicator on the spectrum area
+    var indicator = document.getElementById('freedvIndicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'freedvIndicator';
+        indicator.className = 'spectrum-warning';
+        indicator.style.cssText = 'right:8px; left:auto; top:8px; bottom:auto; cursor:pointer; font-size:11px; padding:2px 8px;';
+        indicator.onclick = function() { toggleFreeDV(); };
+        var specArea = document.getElementById('scopeArea');
+        if (specArea) specArea.appendChild(indicator);
+    }
+
+    if (freedvEnabled) {
+        var syncColor = freedvSync ? '#00ff88' : '#ff4444';
+        var snrText = freedvSNR.toFixed(1);
+        indicator.innerHTML = 'FreeDV ' + freedvModeName + ' <span style="color:' + syncColor + '">' + (freedvSync ? 'SYNC' : 'NO SYNC') + '</span> SNR: ' + snrText + ' dB';
+        indicator.style.display = '';
+    } else {
+        indicator.style.display = 'none';
+    }
+
+    // Re-render func overlay if visible
+    if (currentPanel === 'func') renderFuncOverlay();
+}
+
 function tuneUp() {
     if (currentFreq > 0) {
         var newFreq = currentFreq + tuneStep;

@@ -169,8 +169,8 @@ unix:systemd.files = systemd/wfweb@.service
 unix:systemd.path = $$PREFIX/lib/systemd/system
 INSTALLS += systemd
 
-linux:LIBS += -L./ -lopus
-macx:LIBS += -framework CoreAudio -framework CoreFoundation -lpthread -lopus -lssl -lcrypto
+linux:LIBS += -L./ -lopus -lcodec2
+macx:LIBS += -framework CoreAudio -framework CoreFoundation -lpthread -lopus -lssl -lcrypto -lcodec2
 
 contains(DEFINES,FTDI_SUPPORT){
   win32:INCLUDEPATH += ../LibFT4222-v1.4.7\imports\LibFT4222\inc
@@ -186,7 +186,7 @@ win32 {
         INCLUDEPATH += $$VCPKG_DIR/include/opus
         INCLUDEPATH += $$VCPKG_DIR/include/hidapi
         LIBS += -L$$VCPKG_DIR/lib
-        LIBS += -lportaudio -lopus -lhidapi -llibssl -llibcrypto
+        LIBS += -lportaudio -lopus -lhidapi -llibssl -llibcrypto -lcodec2
     } else {
         INCLUDEPATH += ../opus/include
     }
@@ -242,7 +242,8 @@ SOURCES += \
     src/rigserver.cpp \
     src/ft4222handler.cpp \
     src/rtpaudio.cpp \
-    src/webserver.cpp
+    src/webserver.cpp \
+    src/freedvprocessor.cpp
 
 macx:SOURCES += src/tlsproxy.cpp
 
@@ -296,6 +297,7 @@ HEADERS  += \
     include/yaesuudpcat.h \
     include/yaesuudpcontrol.h \
     include/yaesuudpscope.h \
-    include/webserver.h
+    include/webserver.h \
+    include/freedvprocessor.h
 
 macx:HEADERS += include/tlsproxy.h
