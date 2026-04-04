@@ -373,6 +373,9 @@ jobs:
           if [ -f radae_nopy/build/src/librade.dylib ]; then
             cp radae_nopy/build/src/librade*.dylib wfweb-macos-arm64/
             install_name_tool -change @rpath/librade.0.1.dylib @executable_path/librade.0.1.dylib wfweb-macos-arm64/wfweb || true
+            # Re-sign after install_name_tool (invalidates ad-hoc signature)
+            codesign --force --sign - wfweb-macos-arm64/wfweb
+            codesign --force --sign - wfweb-macos-arm64/librade*.dylib
           fi
           zip -r wfweb-macos-arm64.zip wfweb-macos-arm64
 
