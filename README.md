@@ -89,8 +89,20 @@ Everything wfview does, wfweb does too — plus a built-in web interface:
 | Browser TX audio (mic to rig) | — | ✓ |
 | CW decoder (ggmorse / Goertzel) | — | ✓ |
 | FT8/FT4 DIGI panel (full QSO) | — | ✓ |
+| FreeDV digital voice (700D/700E) | — | ✓ |
+| RADE (Radio Autoencoder) | — | ✓ |
 | Mobile-responsive UI | — | ✓ |
 | Headless / no-display operation | — | ✓ |
+
+### FreeDV and RADE digital voice
+
+wfweb includes server-side FreeDV digital voice processing. When enabled, the server encodes/decodes FreeDV modem tones in real time — browser clients send and receive normal speech audio while the radio transmits and receives FreeDV signals over SSB.
+
+Supported modes: **700D**, **700E**, and **RADE** (Radio Autoencoder — an ML-based codec that uses neural network inference for high-quality low-bitrate voice).
+
+> **CPU usage:** RADE uses neural network inference in real time. Expect roughly 40% CPU usage on a mid-range laptop (e.g. Intel i5-10310U @ 1.70 GHz). The classic FreeDV modes (700D/700E) are much lighter.
+>
+> **Windows:** FreeDV and RADE are currently not available on Windows builds. These features require libcodec2 and the RADE inference runtime, which are only supported on Linux and macOS at this time.
 
 ---
 
@@ -265,6 +277,7 @@ Please support the original project at **https://wfview.org** and **https://www.
 
 The FT8/FT4 DIGI panel is powered by [ft8ts](https://github.com/e04/ft8ts) by e04.
 The CW decoder uses [ggmorse](https://github.com/ggerganov/ggmorse) by Georgi Gerganov.
+FreeDV digital voice uses [codec2](https://github.com/drowe67/codec2) by David Rowe VK5DGR and contributors, and [radae_nopy](https://github.com/peterbmarks/radae_nopy) by Peter Marks VK5APM (a standalone C implementation of the RADE Radio Autoencoder).
 
 ---
 
@@ -272,7 +285,7 @@ The CW decoder uses [ggmorse](https://github.com/ggerganov/ggmorse) by Georgi Ge
 
 GNU General Public License v3.0 — see [LICENSE](LICENSE).
 
-All third-party components retain their original licenses (Qt5 under LGPLv3, QCustomPlot and ft8ts under GPLv3, Speex/libopus/libportaudio/librtaudio/Eigen under their respective licenses, ggmorse under MIT).
+All third-party components retain their original licenses (Qt5 under LGPLv3, QCustomPlot and ft8ts under GPLv3, codec2/FreeDV under LGPLv2.1, RADE under BSD 2-Clause, Speex/libopus/libportaudio/librtaudio/Eigen under their respective licenses, ggmorse under MIT).
 
 ---
 
