@@ -168,6 +168,14 @@ Install Qt 5 and the required libraries via Homebrew:
 brew install qt@5 portaudio opus openssl@3
 ```
 
+For optional FreeDV and RADE support:
+
+```bash
+brew install codec2 cmake autoconf automake libtool
+```
+
+`codec2` enables FreeDV modes (700D, 700E, 1600). `cmake`/`autoconf`/`automake`/`libtool` are needed to build the RADE submodule (see below).
+
 The build also requires these source trees cloned as sibling directories next to `wfweb/`:
 
 | Directory | Repository / Source |
@@ -178,6 +186,23 @@ The build also requires these source trees cloned as sibling directories next to
 
 (`../r8brain-free-src` is referenced as an include path but no sources are compiled from it — an empty directory is sufficient.)
 
+### Build RADE (optional)
+
+RADE support requires building the `radae_nopy` submodule. This compiles a
+custom Opus (with LPCNet/FARGAN) and the RADE sources, which are then statically
+linked into the binary.
+
+```bash
+git submodule update --init radae_nopy
+cd radae_nopy
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j$(sysctl -n hw.ncpu)
+cd ../..
+```
+
+If the submodule is not built, wfweb still compiles — just without the RADE mode.
+
 ### Build
 
 Homebrew's Qt 5 is keg-only, so use its full path for `qmake`:
@@ -186,6 +211,9 @@ Homebrew's Qt 5 is keg-only, so use its full path for `qmake`:
 /opt/homebrew/opt/qt@5/bin/qmake wfweb.pro
 make -j$(sysctl -n hw.ncpu)
 ```
+
+qmake auto-detects both `codec2` (via `pkg-config`) and RADE (via the built
+submodule) and prints which features are enabled.
 
 This produces the `wfweb` binary in the project root.
 
