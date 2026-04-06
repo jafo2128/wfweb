@@ -33,6 +33,7 @@
 #include "audioconverter.h"
 #ifdef FREEDV_SUPPORT
 #include "freedvprocessor.h"
+#include "freedvreporter.h"
 #endif
 #ifdef RADE_SUPPORT
 #include "radeprocessor.h"
@@ -131,6 +132,8 @@ private slots:
     void onFreeDVRxReady(audioPacket audio);
     void onFreeDVTxReady(audioPacket audio);
     void onFreeDVStats(float snr, bool sync);
+    void onFreeDVRxCallsign(const QString &callsign);
+    void onReporterStateChanged(int state);
 #endif
     void drainFreeDVTxBuffer();
 
@@ -139,6 +142,7 @@ private slots:
     void onRadeRxReady(audioPacket audio);
     void onRadeTxReady(audioPacket audio);
     void onRadeStats(float snr, bool sync, float freqOffset);
+    void onRadeRxCallsign(const QString &callsign);
 #endif
 
 
@@ -236,6 +240,10 @@ private:
 #ifdef FREEDV_SUPPORT
     FreeDVProcessor *freedvProcessor = nullptr;
     QThread *freedvThread = nullptr;
+    FreeDVReporter *freedvReporter = nullptr;
+    QString reporterCallsign;
+    QString reporterGrid;
+    bool reporterEnabled = false;
 #endif
     bool freedvEnabled = false;
     int freedvMode = 0;
@@ -257,6 +265,9 @@ private:
     RadeProcessor *radeProcessor = nullptr;
     QThread *radeThread = nullptr;
     float freedvFreqOffset = 0.0f;  // RADE frequency offset estimate
+    QString radeRxCallsign;          // last decoded callsign from EOO
+    bool radeEooDraining = false;    // true while draining EOO frame to ALSA
+    QTimer *radeCallsignClearTimer = nullptr;  // delayed UI clear after decode
 #endif
 
     // Memory channel scanning

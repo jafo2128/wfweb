@@ -2186,7 +2186,7 @@ body.digi-open .digi-bar {
 
         <!-- DIGI Settings Modal -->
         <div id="digiSettingsModal" class="digi-settings-modal">
-            <div class="digi-settings-modal-title">DIGI Settings</div>
+            <div class="digi-settings-modal-title">Station Settings</div>
             <div class="digi-settings-field">
                 <span class="digi-field-label">MY CALL:</span>
                 <input type="text" id="digiMyCall" class="digi-callsign-input" maxlength="10" placeholder="CALL" autocomplete="off">
@@ -2194,6 +2194,13 @@ body.digi-open .digi-bar {
             <div class="digi-settings-field">
                 <span class="digi-field-label">MY GRID:</span>
                 <input type="text" id="digiGrid" class="digi-callsign-input" maxlength="6" placeholder="AA00" autocomplete="off">
+            </div>
+            <div class="digi-settings-field" style="margin-top:6px">
+                <label style="display:flex;align-items:center;gap:6px;color:#8cf;font-size:12px;cursor:pointer">
+                    <input type="checkbox" id="digiReporterEnable">
+                    <span>FreeDV Reporter</span>
+                </label>
+                <span id="digiReporterStatus" style="font-size:10px;color:#556;margin-left:8px"></span>
             </div>
             <button id="digiSettingsCloseBtn" class="digi-settings-close">Close</button>
         </div>
@@ -2414,6 +2421,9 @@ var freedvSync = false;
 var freedvSNR = 0.0;
 var freedvFreqOffset = 0.0;
 var freedvTxGain = 0.25;       // FreeDV mic gain multiplier (same ALC logic as FT8)
+var reporterEnabled = false;
+var reporterState = '';
+var radeRxCallsign = '';
 
 var micEnabled = false;
 var txAudioAvailable = false;
@@ -2590,6 +2600,9 @@ function connect() {
         document.getElementById('connDot').title = 'Connected';
         if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
         send({ cmd: 'getStatus' });
+        // Restore reporter state from localStorage
+        var rCb = document.getElementById('digiReporterEnable');
+        if (rCb && rCb.checked) sendReporterConfig();
     };
     ws.onclose = function() {
         document.getElementById('connDot').classList.remove('connected');
@@ -2724,6 +2737,8 @@ function handleMessage(msg) {
             if (msg.filterShape !== undefined) updateFilterShapeBtn(msg.filterShape);
             if (msg.powerState !== undefined) updatePowerState(msg.powerState);
             if (msg.freedv !== undefined) updateFreeDVStatus(msg);
+            if (msg.reporterEnabled !== undefined) { reporterEnabled = msg.reporterEnabled; var rcb = document.getElementById('digiReporterEnable'); if (rcb) rcb.checked = reporterEnabled; }
+            if (msg.reporterState !== undefined) reporterState = msg.reporterState;
             break;
         case 'update':
             // Handle VFO-specific frequencies if available
@@ -2785,15 +2800,14 @@ function handleMessage(msg) {
                 if (msg.freedvSNR !== undefined) freedvSNR = msg.freedvSNR;
                 if (msg.freedvFreqOffset !== undefined) freedvFreqOffset = msg.freedvFreqOffset;
                 // Redraw just the spectrum indicator
-                var ind = document.getElementById('freedvIndicator');
-                if (ind && freedvEnabled) {
+                if (freedvEnabled) {
                     var sc = freedvSync ? '#00ff88' : '#ff4444';
-                    var syncEl = ind.querySelector('span:nth-child(2)');
-                    var snrEl = ind.querySelector('span:nth-child(3)');
+                    var syncEl = document.getElementById('freedvSyncEl');
+                    var snrEl = document.getElementById('freedvSnrEl');
                     if (syncEl) { syncEl.style.color = sc; syncEl.textContent = freedvSync ? 'SYNC' : 'NO SYNC'; }
                     if (snrEl) snrEl.textContent = 'SNR ' + freedvSNR.toFixed(1);
                     if (freedvModeName === 'RADE') {
-                        var foEl = ind.querySelector('span:nth-child(4)');
+                        var foEl = document.getElementById('freedvFoEl');
                         if (foEl) foEl.textContent = 'FO ' + freedvFreqOffset.toFixed(1);
                     }
                 }
@@ -2807,6 +2821,13 @@ function handleMessage(msg) {
             break;
         case 'freedvStatus':
             updateFreeDVStatus(msg);
+            break;
+        case 'reporterStatus':
+            updateReporterStatus(msg);
+            break;
+        case 'radeCallsign':
+            radeRxCallsign = msg.callsign || '';
+            updateFreeDVStatus({});
             break;
         case 'error':
             console.error('Server error:', msg.message);
@@ -4297,18 +4318,34 @@ function updateFreeDVStatus(msg) {
     if (freedvEnabled) {
         var syncColor = freedvSync ? '#00ff88' : '#ff4444';
         var snrText = freedvSNR.toFixed(1);
-        var foHtml = '';
-        if (freedvModeName === 'RADE')
-            foHtml = '<span style="width:72px; display:inline-block; text-align:right;">FO ' + freedvFreqOffset.toFixed(1) + '</span>';
+        var foHtml = '<span id="freedvFoEl" style="width:72px; display:inline-block; text-align:right;">'
+            + (freedvModeName === 'RADE' ? ('FO ' + freedvFreqOffset.toFixed(1)) : '') + '</span>';
+        var rptDot = '';
+        if (reporterEnabled) {
+            var rc = reporterState === 'connected' ? '#0c6' : reporterState === 'error' ? '#f44' : '#fa0';
+            rptDot = '<span style="width:6px;height:6px;border-radius:50%;background:' + rc + ';display:inline-block" title="Reporter: ' + (reporterState || 'off') + '"></span>';
+        }
+        var csHtml = (freedvModeName === 'RADE' && radeRxCallsign)
+            ? '<span id="freedvCallsign" style="color:#0ff; min-width:60px; display:inline-block; text-align:center;">' + radeRxCallsign + '</span>'
+            : '';
         indicator.innerHTML = '<span id="freedvModeLink" style="cursor:pointer; text-decoration:underline; min-width:72px; display:inline-block;">FreeDV ' + freedvModeName + '</span>'
-            + '<span style="color:' + syncColor + '; width:52px; display:inline-block; text-align:center;">' + (freedvSync ? 'SYNC' : 'NO SYNC') + '</span>'
-            + '<span style="width:62px; display:inline-block; text-align:right;">SNR ' + snrText + '</span>'
+            + '<span id="freedvSyncEl" style="color:' + syncColor + '; width:52px; display:inline-block; text-align:center;">' + (freedvSync ? 'SYNC' : 'NO SYNC') + '</span>'
+            + '<span id="freedvSnrEl" style="width:62px; display:inline-block; text-align:right;">SNR ' + snrText + '</span>'
+            + csHtml
             + foHtml
+            + '<span id="freedvSettingsBtn" style="cursor:pointer; padding:1px 5px; border:1px solid #666; border-radius:3px; font-size:10px;" title="FreeDV Settings">RPT</span>'
+            + rptDot
             + '<span id="freedvMonBtn" style="cursor:pointer; padding:1px 5px; border:1px solid #666; border-radius:3px; font-size:10px;">MON</span>';
         indicator.style.display = 'flex';
         // Mode cycle on click
         var modeLink = document.getElementById('freedvModeLink');
         if (modeLink) modeLink.onclick = function(e) { e.stopPropagation(); cycleFreeDVMode(); };
+        // Settings gear: open DIGI Settings modal
+        var settingsBtn = document.getElementById('freedvSettingsBtn');
+        if (settingsBtn) settingsBtn.onclick = function(e) {
+            e.stopPropagation();
+            document.getElementById('digiSettingsModal').classList.add('visible');
+        };
         // Monitor: bypass FreeDV decoding while pressed
         var monBtn = document.getElementById('freedvMonBtn');
         if (monBtn) {
@@ -5581,6 +5618,40 @@ function initCWHandlers() {
 function digiPeriod() { return digiMode === 'FT4' ? 7.5 : 15; }
 function getMyCall() { return ((document.getElementById('digiMyCall') || {}).value || '').toUpperCase(); }
 function getMyGrid() { return ((document.getElementById('digiGrid') || {}).value || '').toUpperCase().substr(0, 4); }
+
+// --- FreeDV Reporter ---
+function sendReporterConfig() {
+    var cb = document.getElementById('digiReporterEnable');
+    if (!cb || !ws || ws.readyState !== 1) return;
+    send({
+        cmd: 'setReporter',
+        enabled: cb.checked,
+        callsign: getMyCall(),
+        grid: getMyGrid()
+    });
+}
+function updateReporterStatus(msg) {
+    if (msg.enabled !== undefined) reporterEnabled = msg.enabled;
+    if (msg.state !== undefined) reporterState = msg.state;
+    var cb = document.getElementById('digiReporterEnable');
+    var st = document.getElementById('digiReporterStatus');
+    if (cb && msg.enabled !== undefined) cb.checked = msg.enabled;
+    if (st) {
+        st.textContent = msg.state || '';
+        st.style.color = msg.state === 'connected' ? '#0c6' : msg.state === 'error' ? '#f44' : '#556';
+    }
+    // Refresh the FreeDV indicator bar to update the reporter dot
+    if (freedvEnabled) updateFreeDVStatus({});
+}
+function initReporter() {
+    var cb = document.getElementById('digiReporterEnable');
+    if (!cb) return;
+    try { cb.checked = localStorage.getItem('digiReporterEnabled') === '1'; } catch(e) {}
+    cb.addEventListener('change', function() {
+        try { localStorage.setItem('digiReporterEnabled', this.checked ? '1' : '0'); } catch(e) {}
+        sendReporterConfig();
+    });
+}
 
 // Check that MY CALL and MY GRID are set before transmitting.
 // Opens the settings modal and shows a status warning if not.
@@ -7564,6 +7635,7 @@ function initDigiHandlers() {
             this.value = this.value.toUpperCase();
             try { localStorage.setItem('digiMyCall', this.value); } catch(e) {}
             updateDigiMsgRows();
+            sendReporterConfig();
         });
     }
     if (gridEl) {
@@ -7571,6 +7643,7 @@ function initDigiHandlers() {
             this.value = this.value.toUpperCase();
             try { localStorage.setItem('digiGrid', this.value); } catch(e) {}
             updateDigiMsgRows();
+            sendReporterConfig();
         });
     }
 
@@ -7864,6 +7937,7 @@ buildColorTable();
 initSliderTracking();
 initCWHandlers();
 initDigiHandlers();
+initReporter();
 
 // Top bar LOG button → SSB/voice QSO log
 var qsoLogBtn = document.getElementById('qsoLogBtn');
