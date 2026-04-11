@@ -2645,6 +2645,7 @@ function handleMessage(msg) {
                 if (pv) pv.textContent = 'wfweb v. ' + msg.version;
             }
             if (msg.model) rigModelName = msg.model;
+            if (msg.freedvModes) freedvModes = msg.freedvModes;
             if (msg.connected) {
                 if (msg.modes) populateModes(msg.modes);
                 if (msg.hasSpectrum) { hasSpectrum = true; spectAmpMax = msg.spectAmpMax || 160; }
@@ -2655,7 +2656,6 @@ function handleMessage(msg) {
                 if (msg.preamps) populatePreamps(msg.preamps);
                 if (msg.filters) populateFilters(msg.filters);
                 if (msg.hasFilterSettings !== undefined) updateHasFilterSettings(msg.hasFilterSettings);
-                if (msg.freedvModes) freedvModes = msg.freedvModes;
 
                 updateWarningVisibility();
             } else {

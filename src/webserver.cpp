@@ -368,6 +368,16 @@ void webServer::receiveRigCaps(rigCapabilities *caps)
             obj["audioSampleRate"] = (int)rigSampleRate;
         }
         obj["txAudioAvailable"] = txAudioConfigured;
+        QJsonArray fdvModes;
+#ifdef RADE_SUPPORT
+        fdvModes.append("RADE");
+#endif
+#ifdef FREEDV_SUPPORT
+        fdvModes.append("700D");
+        fdvModes.append("700E");
+        fdvModes.append("1600");
+#endif
+        obj["freedvModes"] = fdvModes;
         if (!rigCaps->scopeCenterSpans.empty()) {
             QJsonArray spans;
             for (const centerSpanData &s : rigCaps->scopeCenterSpans) {
@@ -1919,6 +1929,19 @@ QJsonObject webServer::buildInfoJson() const
     QJsonObject info;
     info["version"] = QString(WFWEB_VERSION);
 
+    // freedvModes depends only on compile-time flags, not on the rig,
+    // so it must be sent regardless of whether rigCaps is populated yet.
+    QJsonArray fdvModes;
+#ifdef RADE_SUPPORT
+    fdvModes.append("RADE");
+#endif
+#ifdef FREEDV_SUPPORT
+    fdvModes.append("700D");
+    fdvModes.append("700E");
+    fdvModes.append("1600");
+#endif
+    info["freedvModes"] = fdvModes;
+
     if (rigCaps) {
         info["connected"] = true;
         info["model"] = rigCaps->modelName;
@@ -1937,16 +1960,6 @@ QJsonObject webServer::buildInfoJson() const
             info["audioSampleRate"] = (int)rigSampleRate;
         }
         info["txAudioAvailable"] = txAudioConfigured;
-        QJsonArray fdvModes;
-#ifdef RADE_SUPPORT
-        fdvModes.append("RADE");
-#endif
-#ifdef FREEDV_SUPPORT
-        fdvModes.append("700D");
-        fdvModes.append("700E");
-        fdvModes.append("1600");
-#endif
-        info["freedvModes"] = fdvModes;
         info["hasFilterSettings"] = rigCaps->commands.contains(funcPBTInner);
         info["hasPowerControl"] = rigCaps->commands.contains(funcPowerControl);
         if (!rigCaps->scopeCenterSpans.empty()) {
