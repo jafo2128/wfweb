@@ -1319,11 +1319,20 @@ void webServer::requestVfoUpdate()
     // then the normal receiveCache flow pushes the update to web clients.
     QTimer::singleShot(200, this, [this]() {
         if (!queue) return;
-        vfoCommandType t = queue->getVfoCommand(vfoA, 0, false);
-        if (t.freqFunc != funcNone)
-            queue->add(priorityImmediate, t.freqFunc, false, 0);
-        if (t.modeFunc != funcNone)
-            queue->add(priorityImmediate, t.modeFunc, false, 0);
+        bool cmd29 = rigCaps && rigCaps->hasCommand29;
+        vfoCommandType tA = queue->getVfoCommand(vfoA, 0, false);
+        if (tA.freqFunc != funcNone)
+            queue->add(priorityImmediate, tA.freqFunc, false, 0);
+        if (tA.modeFunc != funcNone)
+            queue->add(priorityImmediate, tA.modeFunc, false, 0);
+        // On cmd29 rigs also refresh the sub receiver (VFO B).
+        if (cmd29) {
+            vfoCommandType tB = queue->getVfoCommand(vfoB, 1, false);
+            if (tB.freqFunc != funcNone)
+                queue->add(priorityImmediate, tB.freqFunc, false, 1);
+            if (tB.modeFunc != funcNone)
+                queue->add(priorityImmediate, tB.modeFunc, false, 1);
+        }
     });
 }
 
@@ -1362,16 +1371,40 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
     }
     else if (type == "selectVFO") {
         QString vfoName = cmd["value"].toString();
-        vfo_t v = (vfoName == "B") ? vfoB : vfoA;
+        // On cmd29 rigs (IC-7610/785x/9700/905) selecting a VFO means Main/Sub,
+        // not A/B. funcSelectVFO in icomcommander maps vfo_t to the right command.
+        bool wantB = (vfoName == "B");
+        vfo_t v;
+        if (rigCaps && rigCaps->hasCommand29)
+            v = wantB ? vfoSub : vfoMain;
+        else
+            v = wantB ? vfoB : vfoA;
         queue->addUnique(priorityImmediate, queueItem(funcSelectVFO, QVariant::fromValue<vfo_t>(v), false));
         requestVfoUpdate();
     }
     else if (type == "swapVFO") {
-        queue->add(priorityImmediate, funcVFOSwapAB, false, false);
+        // IC-7300/7100/705/etc use VFO Swap A/B; IC-7610/785x/9700/905 use Swap M/S.
+        funcs swapFunc = funcNone;
+        if (rigCaps) {
+            if (rigCaps->commands.contains(funcVFOSwapAB))
+                swapFunc = funcVFOSwapAB;
+            else if (rigCaps->commands.contains(funcVFOSwapMS))
+                swapFunc = funcVFOSwapMS;
+        }
+        if (swapFunc != funcNone)
+            queue->add(priorityImmediate, swapFunc, false, 0);
         requestVfoUpdate();
     }
     else if (type == "equalizeVFO") {
-        queue->add(priorityImmediate, funcVFOEqualAB, false, false);
+        funcs eqFunc = funcNone;
+        if (rigCaps) {
+            if (rigCaps->commands.contains(funcVFOEqualAB))
+                eqFunc = funcVFOEqualAB;
+            else if (rigCaps->commands.contains(funcVFOEqualMS))
+                eqFunc = funcVFOEqualMS;
+        }
+        if (eqFunc != funcNone)
+            queue->add(priorityImmediate, eqFunc, false, 0);
         requestVfoUpdate();
     }
     else if (type == "setPTT") {
@@ -1544,7 +1577,12 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
     }
     else if (type == "setSplit") {
         bool on = cmd["value"].toBool();
-        queue->addUnique(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(on ? 1 : 0), false, 0));
+        bool supported = rigCaps && rigCaps->commands.contains(funcSplitStatus);
+        qCInfo(logWebServer) << "setSplit:" << on << "supported=" << supported
+                             << "hasCmd29=" << (rigCaps && rigCaps->hasCommand29);
+        if (supported) {
+            queue->addUnique(priorityImmediate, queueItem(funcSplitStatus, QVariant::fromValue<uchar>(on ? 1 : 0), false, 0));
+        }
     }
     else if (type == "setSpan") {
         int idx = cmd["value"].toInt();
@@ -2035,7 +2073,12 @@ QJsonObject webServer::buildStatusJson()
         status["frequency"] = (qint64)f.Hz;
     }
 
-    // VFO A and VFO B frequencies (send both)
+    // VFO A and VFO B frequencies (send both).
+    // On cmd29 rigs (IC-7610 etc) the two VFOs are Main (rx=0) and Sub (rx=1),
+    // both accessed via funcFreq with different receiver indices. On A/B rigs
+    // (IC-7300 etc) funcSelectedFreq/funcUnselectedFreq or a single funcFreq
+    // are used at rx=0 with different vfo_t.
+    bool cmd29 = rigCaps && rigCaps->hasCommand29;
     vfoCommandType tA = queue->getVfoCommand(vfoA, 0, false);
     cacheItem freqCacheA = queue->getCache(tA.freqFunc, 0);
     if (freqCacheA.value.isValid()) {
@@ -2043,8 +2086,8 @@ QJsonObject webServer::buildStatusJson()
         status["vfoAFrequency"] = (qint64)fA.Hz;
     }
 
-    vfoCommandType tB = queue->getVfoCommand(vfoB, 0, false);
-    cacheItem freqCacheB = queue->getCache(tB.freqFunc, 0);
+    vfoCommandType tB = queue->getVfoCommand(vfoB, cmd29 ? 1 : 0, false);
+    cacheItem freqCacheB = queue->getCache(tB.freqFunc, cmd29 ? 1 : 0);
     if (freqCacheB.value.isValid()) {
         freqt fB = freqCacheB.value.value<freqt>();
         status["vfoBFrequency"] = (qint64)fB.Hz;
