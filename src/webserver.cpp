@@ -29,6 +29,13 @@
 #include "tlsproxy.h"
 #endif
 
+// Fixed TX gain applied to RADE modem output (and the EOO frame) in the
+// webserver before writing to the USB CODEC. Combined with RADE_TX_SCALE
+// in radeprocessor.cpp, this gives a stable drive level that hits ~100%
+// power on a full-duty signal. Kept separate from freedvTxGain so the
+// classic-FreeDV ALC loop can't affect RADE.
+static constexpr float RADE_TX_GAIN = 0.4f;
+
 webServer::webServer(QObject *parent) :
     QObject(parent)
 {
@@ -1394,12 +1401,12 @@ void webServer::handleCommand(QWebSocket *client, const QJsonObject &cmd)
                 } else {
                     writeData = eooData;
                 }
-                // Apply ALC-controlled gain
-                if (freedvTxGain < 0.99f) {
+                // RADE uses a fixed TX level (see onRadeTxReady); EOO must match.
+                {
                     qint16 *samples = reinterpret_cast<qint16 *>(writeData.data());
                     int count = writeData.size() / (int)sizeof(qint16);
                     for (int i = 0; i < count; i++)
-                        samples[i] = qBound((int)-32768, (int)(samples[i] * freedvTxGain), (int)32767);
+                        samples[i] = qBound((int)-32768, (int)(samples[i] * RADE_TX_GAIN), (int)32767);
                 }
                 freedvTxBuffer.append(writeData);
                 qInfo() << "Web: queued RADE EOO frame (" << writeData.size() << "bytes), delaying unkey";
@@ -2951,12 +2958,15 @@ void webServer::onRadeTxReady(audioPacket audio)
             writeData = audio.data;
         }
 
-        // Apply ALC-controlled gain
-        if (freedvTxGain < 0.99f) {
+        // RADE uses a fixed TX level. The modem is a full-duty constant-envelope
+        // signal, and radeprocessor.cpp already applies RADE_TX_SCALE. Multiplying
+        // by a drifting freedvTxGain on top caused progressive power loss — use a
+        // known-good constant instead and keep the ALC loop out of RADE entirely.
+        {
             qint16 *samples = reinterpret_cast<qint16 *>(writeData.data());
             int count = writeData.size() / (int)sizeof(qint16);
             for (int i = 0; i < count; i++)
-                samples[i] = qBound((int)-32768, (int)(samples[i] * freedvTxGain), (int)32767);
+                samples[i] = qBound((int)-32768, (int)(samples[i] * RADE_TX_GAIN), (int)32767);
         }
 
         freedvTxBuffer.append(writeData);
