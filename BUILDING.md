@@ -113,7 +113,7 @@ All build output goes to `build.log`. The last line is `EXIT:0` (success) or `EX
      source (with LPCNet/FARGAN) via CMake ExternalProject.
    - Patches Opus and RADE headers for MSVC compatibility (`sed` in MSYS2).
    - Builds the custom Opus as a static `.lib` using MSVC cmake.
-   - Skipped if `radae_nopy/build/opus_msvc_build/Release/opus.lib` already exists.
+   - Skipped if `resources/radae_nopy/build/opus_msvc_build/Release/opus.lib` already exists.
 
 2. **codec2 / FreeDV** (if `codec2.lib` not yet in vcpkg prefix):
    - Clones [drowe67/codec2](https://github.com/drowe67/codec2) into `codec2/`.
@@ -146,7 +146,7 @@ The self-contained deployment directory is `wfweb-release\`, containing:
 - `wfweb-release/`, `wfweb-debug/` (output directories)
 
 Note: `build.bat clean` does **not** remove the RADE or codec2 build artifacts.
-To force a full rebuild of those, delete `radae_nopy\build\opus_msvc_build\` and/or
+To force a full rebuild of those, delete `resources/radae_nopy\build\opus_msvc_build\` and/or
 remove `codec2.lib` from `C:\vcpkg\installed\x64-windows\lib\`.
 
 ### Helper scripts
@@ -193,8 +193,8 @@ custom Opus (with LPCNet/FARGAN) and the RADE sources, which are then statically
 linked into the binary.
 
 ```bash
-git submodule update --init radae_nopy
-cd radae_nopy
+git submodule update --init resources/radae_nopy
+cd resources/radae_nopy
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j$(sysctl -n hw.ncpu)

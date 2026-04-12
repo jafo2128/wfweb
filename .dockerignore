@@ -14,7 +14,7 @@ release/
 debug/
 
 # RADE submodule build (rebuilt inside container)
-radae_nopy/build/
+resources/radae_nopy/build/
 
 # Git and CI
 .git

@@ -61,7 +61,7 @@ exit /b 0
 
 :build
 :: --- Build RADE custom Opus (if radae_nopy submodule is present) ---
-set RADAE_DIR=%SRCDIR%\radae_nopy
+set RADAE_DIR=%SRCDIR%\resources\radae_nopy
 set RADAE_BUILD=%RADAE_DIR%\build
 set OPUS_MSVC_LIB=%RADAE_BUILD%\opus_msvc_build\Release\opus.lib
 

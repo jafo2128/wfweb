@@ -45,7 +45,7 @@ jobs:
 
       - name: Build RADE
         run: |
-          cd radae_nopy
+          cd resources/radae_nopy
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
@@ -69,7 +69,7 @@ jobs:
 
           # Bundle librade.so (not packaged by distros yet)
           mkdir -p ${DEB_ROOT}/usr/lib
-          cp radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
+          cp resources/radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
 
           # Install license files
           mkdir -p ${DEB_ROOT}/usr/share/doc/wfweb
@@ -159,7 +159,7 @@ jobs:
 
       - name: Build RADE
         run: |
-          cd radae_nopy
+          cd resources/radae_nopy
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
@@ -182,7 +182,7 @@ jobs:
 
           # Bundle librade.so
           mkdir -p ${DEB_ROOT}/usr/lib
-          cp radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
+          cp resources/radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
 
           # Install license files
           mkdir -p ${DEB_ROOT}/usr/share/doc/wfweb
@@ -272,7 +272,7 @@ jobs:
 
       - name: Build RADE
         run: |
-          cd radae_nopy
+          cd resources/radae_nopy
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
@@ -295,7 +295,7 @@ jobs:
 
           # Bundle librade.so
           mkdir -p ${DEB_ROOT}/usr/lib
-          cp radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
+          cp resources/radae_nopy/build/src/librade.so* ${DEB_ROOT}/usr/lib/
 
           # Install license files
           mkdir -p ${DEB_ROOT}/usr/share/doc/wfweb
@@ -366,7 +366,7 @@ jobs:
 
       - name: Build RADE
         run: |
-          cd radae_nopy
+          cd resources/radae_nopy
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j$(sysctl -n hw.ncpu)
@@ -426,7 +426,7 @@ jobs:
         shell: C:\msys64\usr\bin\bash.exe -l {0}
         run: |
           pacman -S --noconfirm autoconf automake libtool make patch gcc cmake
-          cd "$GITHUB_WORKSPACE/radae_nopy"
+          cd "$GITHUB_WORKSPACE/resources/radae_nopy"
           mkdir -p build && cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
@@ -434,13 +434,13 @@ jobs:
       - name: Patch Opus headers for MSVC
         shell: pwsh
         run: |
-          $nnet = "radae_nopy\build\build_opus-prefix\src\build_opus\dnn\nnet.h"
+          $nnet = "resources\radae_nopy\build\build_opus-prefix\src\build_opus\dnn\nnet.h"
           (Get-Content $nnet -Raw) -replace `
             '#define RADE_EXPORT __attribute__\(\(visibility\("default"\)\)\)', `
             "#ifdef _MSC_VER`n    #define RADE_EXPORT`n  #else`n    #define RADE_EXPORT __attribute__((visibility(""default"")))`n  #endif" `
             | Set-Content $nnet
 
-          $api = "radae_nopy\src\rade_api.h"
+          $api = "resources\radae_nopy\src\rade_api.h"
           (Get-Content $api -Raw) -replace `
             '#if IS_BUILDING_RADE_API', `
             "#if defined(RADE_STATIC)`n#define RADE_EXPORT`n#elif IS_BUILDING_RADE_API" `
@@ -449,8 +449,8 @@ jobs:
       - name: Build custom Opus (MSVC)
         shell: cmd
         run: |
-          cmake -S radae_nopy\build\build_opus-prefix\src\build_opus -B radae_nopy\build\opus_msvc_build -DOPUS_DRED=ON -DOPUS_OSCE=ON -DBUILD_SHARED_LIBS=OFF -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF -A x64
-          cmake --build radae_nopy\build\opus_msvc_build --config Release
+          cmake -S resources\radae_nopy\build\build_opus-prefix\src\build_opus -B resources\radae_nopy\build\opus_msvc_build -DOPUS_DRED=ON -DOPUS_OSCE=ON -DBUILD_SHARED_LIBS=OFF -DOPUS_BUILD_PROGRAMS=OFF -DOPUS_BUILD_TESTING=OFF -A x64
+          cmake --build resources\radae_nopy\build\opus_msvc_build --config Release
 
       - name: Clone codec2
         run: git clone --depth 1 https://github.com/drowe67/codec2.git codec2

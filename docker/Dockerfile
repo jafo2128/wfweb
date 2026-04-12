@@ -23,8 +23,8 @@ WORKDIR /src
 COPY . .
 
 # Build RADE (radae_nopy submodule) — clean any stale host cache first
-RUN if [ -f radae_nopy/src/rade_api.h ]; then \
-      cd radae_nopy && rm -rf build && mkdir build && cd build \
+RUN if [ -f resources/radae_nopy/src/rade_api.h ]; then \
+      cd resources/radae_nopy && rm -rf build && mkdir build && cd build \
       && cmake -DCMAKE_BUILD_TYPE=Release .. \
       && make -j$(nproc); \
     fi
@@ -33,9 +33,9 @@ RUN qmake wfweb.pro && make -j$(nproc)
 RUN make install INSTALL_ROOT=/install
 
 # Copy librade.so to install tree for the runtime stage
-RUN if [ -f radae_nopy/build/src/librade.so ]; then \
+RUN if [ -f resources/radae_nopy/build/src/librade.so ]; then \
       mkdir -p /install/usr/lib \
-      && cp radae_nopy/build/src/librade.so* /install/usr/lib/; \
+      && cp resources/radae_nopy/build/src/librade.so* /install/usr/lib/; \
     fi
 
 # Runtime stage

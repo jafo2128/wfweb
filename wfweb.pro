@@ -175,10 +175,10 @@ macx:LIBS += -framework CoreAudio -framework CoreFoundation -lpthread -lopus -ls
 # RADE V1 (radae_nopy) support.
 # Auto-detects the radae_nopy submodule; override with RADAE_DIR env var or qmake arg.
 # Build radae_nopy first:
-#   Linux/macOS: cd radae_nopy/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make
+#   Linux/macOS: cd resources/radae_nopy/build && cmake -DCMAKE_BUILD_TYPE=Release .. && make
 #   Windows:     build custom Opus with cmake (see BUILDING-WINDOWS.md)
 isEmpty(RADAE_DIR): RADAE_DIR = $$(RADAE_DIR)
-isEmpty(RADAE_DIR): exists($$PWD/radae_nopy/src/rade_api.h): RADAE_DIR = $$PWD/radae_nopy
+isEmpty(RADAE_DIR): exists($$PWD/resources/radae_nopy/src/rade_api.h): RADAE_DIR = $$PWD/resources/radae_nopy
 !isEmpty(RADAE_DIR) {
     isEmpty(RADAE_BUILD): RADAE_BUILD = $$RADAE_DIR/build
     # Check for built artifacts (platform-specific paths)
