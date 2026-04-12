@@ -547,7 +547,7 @@ jobs:
     name: Publish release
     needs: [build-linux-ubuntu2404, build-linux-debian12, build-linux-debian13, build-macos, build-windows]
     runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
 
@@ -558,6 +558,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'dev-build' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Development Build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             wfweb-x86_64-ubuntu2404-deb/*.deb
             wfweb-arm64-ubuntu2404-deb/*.deb
@@ -567,5 +570,5 @@ jobs:
             wfweb-arm64-debian13-deb/*.deb
             wfweb-macos-arm64/wfweb-macos-arm64.zip
             wfweb-windows-x86_64/wfweb-windows-x86_64.zip
-          generate_release_notes: true
+          generate_release_notes: ${{ startsWith(github.ref, 'refs/tags/v') }}
           overwrite: true
