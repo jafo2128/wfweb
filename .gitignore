@@ -22,6 +22,6 @@ IC7300-screenshots/
 test.log
 Makefile.server
 wfweb
-CLAUDE.md
+.claude/settings.local.json
 *.ini
 .DS_Store
