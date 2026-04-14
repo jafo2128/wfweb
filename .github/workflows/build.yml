@@ -55,6 +55,11 @@ jobs:
           qmake wfweb.pro
           make -j$(nproc)
 
+      - name: Install rig definitions
+        run: |
+          sudo mkdir -p /usr/local/share/wfview/rigs
+          sudo cp rigs/*.rig /usr/local/share/wfview/rigs/
+
       - name: Run tests
         run: |
           sudo apt-get install -y python3-pytest python3-requests
@@ -174,6 +179,11 @@ jobs:
           qmake wfweb.pro
           make -j$(nproc)
 
+      - name: Install rig definitions
+        run: |
+          mkdir -p /usr/local/share/wfview/rigs
+          cp rigs/*.rig /usr/local/share/wfview/rigs/
+
       - name: Run tests
         run: |
           apt-get install -y python3-pytest python3-requests
@@ -291,6 +301,11 @@ jobs:
         run: |
           qmake wfweb.pro
           make -j$(nproc)
+
+      - name: Install rig definitions
+        run: |
+          mkdir -p /usr/local/share/wfview/rigs
+          cp rigs/*.rig /usr/local/share/wfview/rigs/
 
       - name: Run tests
         run: |

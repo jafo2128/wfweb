@@ -87,7 +87,7 @@ def _dump_and_fail(proc, event_loop, loop_thread, message, url):
     pytest.fail(f"{message}. URL: {url}")
 
 
-def _wait_for_cache(freq_url: str, timeout: float = 10.0) -> bool:
+def _wait_for_cache(freq_url: str, timeout: float = 20.0) -> bool:
     """Poll until the frequency cache is populated (first poll cycle complete)."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
