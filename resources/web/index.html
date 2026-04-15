@@ -2469,6 +2469,7 @@ var scopeDragMoved = false;
 var scopeDragPointerId = null;
 var scopeDragCanvas = null;
 var scopeDragStartX = 0;
+var scopeDragStartFreq = 0;
 var scopeDragLastTuneTime = 0;
 var scopeDragRectLeft = 0;
 var scopeDragRectWidth = 0;
@@ -4816,12 +4817,13 @@ function scopeSetVisualPan(px) {
     if (wf) wf.style.transform = t;
 }
 
-function scopeFreqFromDragClientX(clientX) {
+function scopeFreqFromDragDeltaX(deltaX) {
     if (scopeDragRectWidth <= 0 || spectStartFreq <= 0 || spectEndFreq <= spectStartFreq) return 0;
-    var frac = (clientX - scopeDragRectLeft) / scopeDragRectWidth;
-    frac = Math.max(0, Math.min(1, frac));
-    frac = 1 - frac;
-    return Math.round((spectStartFreq + (spectEndFreq - spectStartFreq) * frac) * 1e6);
+    if (scopeDragStartFreq <= 0) return 0;
+    var spanHz = (spectEndFreq - spectStartFreq) * 1e6;
+    var hzPerPx = spanHz / scopeDragRectWidth;
+    // Left pan (negative deltaX) should increase frequency.
+    return Math.max(1, Math.round(scopeDragStartFreq - deltaX * hzPerPx));
 }
 
 function scopeIndicatorCenterX(w) {
@@ -4854,6 +4856,7 @@ function scopePointerDown(e) {
     scopeDragPointerId = e.pointerId;
     scopeDragCanvas = e.currentTarget;
     scopeDragStartX = e.clientX;
+    scopeDragStartFreq = currentFreq;
     scopeDragLastTuneTime = 0;
 
     var rect = scopeDragCanvas.getBoundingClientRect();
@@ -4881,7 +4884,7 @@ function scopePointerMove(e) {
     if (scopeDragMoved) {
         var now = Date.now();
         if (now - scopeDragLastTuneTime >= 35) {
-            var dragFreq = scopeFreqFromDragClientX(e.clientX);
+            var dragFreq = scopeFreqFromDragDeltaX(deltaX);
             if (dragFreq > 0) send({ cmd: 'setFrequency', value: dragFreq });
             scopeDragLastTuneTime = now;
         }
@@ -4891,7 +4894,7 @@ function scopePointerMove(e) {
     if (!spectRenderPending) { spectRenderPending = true; requestAnimationFrame(renderScope); }
 }
 
-function scopePointerUpOrCancel(e) {
+function scopePointerEnd(e, commitTune) {
     if (!scopeDragActive || e.pointerId !== scopeDragPointerId || !scopeDragCanvas) return;
 
     var targetCanvas = scopeDragCanvas;
@@ -4901,26 +4904,38 @@ function scopePointerUpOrCancel(e) {
         try { targetCanvas.releasePointerCapture(e.pointerId); } catch (err) {}
     }
 
-    var finalFreq = scopeFreqFromDragClientX(e.clientX);
+    var finalDeltaX = e.clientX - scopeDragStartX;
+    var finalDragFreq = scopeFreqFromDragDeltaX(finalDeltaX);
+    var finalClickFreq = scopeFreqFromClientX(targetCanvas, e.clientX);
 
     scopeDragActive = false;
     scopeDragMoved = false;
     scopeDragPointerId = null;
     scopeDragCanvas = null;
+    scopeDragStartFreq = 0;
     scopeDragRectLeft = 0;
     scopeDragRectWidth = 0;
     scopeSetVisualPan(0);
     scopeFreezeDuringDrag = false;
 
-    if (finalFreq > 0) {
+    if (commitTune) {
         if (wasDrag) {
-            send({ cmd: 'setFrequency', value: finalFreq });
+            if (finalDragFreq > 0) send({ cmd: 'setFrequency', value: finalDragFreq });
         } else {
-            scopeClick({ target: targetCanvas, clientX: e.clientX });
+            if (finalClickFreq > 0) send({ cmd: 'setFrequency', value: finalClickFreq });
         }
     }
 
     if (!spectRenderPending) { spectRenderPending = true; requestAnimationFrame(renderScope); }
+}
+
+function scopePointerUp(e) {
+    scopePointerEnd(e, true);
+}
+
+function scopePointerCancel(e) {
+    // Cancel should only clean up interaction state, never retune.
+    scopePointerEnd(e, false);
 }
 
 // ============================================================
@@ -7881,8 +7896,8 @@ var scopeCanvasList = [document.getElementById('spectrumCanvas'), document.getEl
 scopeCanvasList.forEach(function(canvas) {
     canvas.addEventListener('pointerdown', scopePointerDown);
     canvas.addEventListener('pointermove', scopePointerMove);
-    canvas.addEventListener('pointerup', scopePointerUpOrCancel);
-    canvas.addEventListener('pointercancel', scopePointerUpOrCancel);
+    canvas.addEventListener('pointerup', scopePointerUp);
+    canvas.addEventListener('pointercancel', scopePointerCancel);
     canvas.addEventListener('wheel', scopeWheel, { passive: false });
 });
 window.addEventListener('resize', function() {
