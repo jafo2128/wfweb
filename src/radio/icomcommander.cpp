@@ -182,6 +182,13 @@ void icomCommander::commSetup(QHash<quint16,rigInfo> rigList, quint16 rigCivAddr
 void icomCommander::closeComm()
 {
     qDebug(logRig()) << "Closing rig comms";
+    // Clear the queue's rigCaps pointer so that when determineRigCaps()
+    // runs again on reconnect its setRigCaps(&rigCaps) call actually
+    // re-emits rigCapsUpdated — the signal is guarded by a pointer-equality
+    // check that would otherwise suppress the reconnect notification.
+    if (queue != Q_NULLPTR) {
+        queue->setRigCaps(Q_NULLPTR);
+    }
     if (comm != Q_NULLPTR) {
         delete comm;
     }
@@ -216,6 +223,12 @@ void icomCommander::commonSetup()
 
     lookingForRig = true;
     foundRig = false;
+
+    // Reconnect path: without resetting these, determineRigCaps() is skipped
+    // (gated on modelID == 0), leaving rigCaps.commands nearly empty so every
+    // incoming CI-V response logs "Unsupported command received from rig".
+    rigCaps.modelID = 0;
+    haveRigCaps = false;
 
     // Add the below commands so we can get a response until we have received rigCaps
     rigCaps.commands.clear();

@@ -349,6 +349,11 @@ void servermain::receiveRigCaps(rigCapabilities* rigCaps)
     // Entry point for unknown rig being identified at the start of the program.
     //now we know what the rig ID is:
 
+    // closeComm() clears the queue's rigCaps pointer during LAN teardown,
+    // which emits rigCapsUpdated(nullptr). Ignore that — the reconnect
+    // will re-fire with a valid pointer after determineRigCaps() runs.
+    if (rigCaps == Q_NULLPTR) return;
+
     // Signal may come from rigCommander or cachingQueue
     rigCommander* sender = qobject_cast<rigCommander*>(QObject::sender());
 
