@@ -6,6 +6,37 @@ a built-in web interface. See https://gitlab.com/eliggett/wfview for the
 upstream wfview history.
 
 
+v0.5.2 (2026-04-19)
+--------------------
+
+Features:
+- Add LAN disconnect/reconnect UI with clean shutdown
+- Add Main/Sub VFO awareness for Command29 radios (IC-7610, IC-785x,
+  IC-9700, IC-905)
+- Add touch and pointer event handling for spectrum and waterfall canvases
+- Refactor scope drag handling for improved frequency dragging interaction
+
+Fixes:
+- Fix Power On overlay rendering during powering-on state (#33)
+- Fix LAN reconnect leaving rigCaps unpopulated
+- Fix VFO label/frequency desync on non-cmd29 rigs
+- Fix deadlock from receiveCache routing frequency updates by VFO
+- Fix UI elements not populated after LAN power-up (#19)
+- Fix waterfall flash on drag release and waterfall dragging (#22)
+- Fix CW decoder audio cracking on Windows browsers (#21)
+- Fix Windows build: RADE Opus cmake generator and header patching
+
+Testing / CI:
+- Add integration test suite with mock Icom radio (49 tests covering USB
+  and LAN paths)
+- Run integration tests in all CI builds
+- Per-branch dev builds with branch name in filenames and tags
+- Publish dev-build pre-release on manual workflow runs
+
+Documentation:
+- Add CLAUDE.md and Claude Code commands for AI-assisted development
+
+
 v0.5.1 (2026-04-11)
 --------------------
 
