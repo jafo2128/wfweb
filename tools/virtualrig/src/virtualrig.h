@@ -41,6 +41,11 @@ public:
 
     const Config& config() const { return cfg; }
 
+    // State accessors used by the mixer for freq/mode-aware routing. Safe to
+    // read from the main thread (civEmulator mutates there via queued slots).
+    quint64 freq() const;
+    quint8 mode() const;
+
 private slots:
     void onTxAudioFromClient(const audioPacket& pkt);
     void onRxAudioFromMixer(int dstRig, const audioPacket& pkt);

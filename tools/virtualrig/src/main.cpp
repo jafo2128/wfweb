@@ -41,10 +41,13 @@ int main(int argc, char* argv[])
     QCommandLineOption attenOpt("atten",
         "Linear gain applied to inter-rig audio (default 0.1 ≈ -20 dB).",
         "gain", "0.1");
+    QCommandLineOption broadcastOpt("broadcast",
+        "Disable freq/mode gating; every rig hears every other rig.");
 
     parser.addOption(rigsOpt);
     parser.addOption(basePortOpt);
     parser.addOption(attenOpt);
+    parser.addOption(broadcastOpt);
     parser.process(app);
 
     bool ok = false;
@@ -66,6 +69,7 @@ int main(int argc, char* argv[])
 
     auto* mixer = new channelMixer(n, &app);
     mixer->setAttenuation(atten);
+    mixer->setChannelRouting(!parser.isSet(broadcastOpt));
 
     QList<virtualRig*> rigs;
     const char* labels = "ABCDEFGHIJKLMNOP";
@@ -79,8 +83,13 @@ int main(int argc, char* argv[])
         cfg.audioPort   = basePort + i * 10 + 2;
         auto* rig = new virtualRig(cfg, mixer, &app);
         rigs.append(rig);
+        mixer->registerRig(i, rig);
         rig->start();
     }
+
+    qInfo() << "virtualrig: routing ="
+            << (parser.isSet(broadcastOpt) ? "broadcast (all rigs hear all)"
+                                           : "channel (same mode + passband)");
 
     std::signal(SIGINT, sigintHandler);
     std::signal(SIGTERM, sigintHandler);

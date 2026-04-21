@@ -78,6 +78,9 @@ virtualRig::~virtualRig()
     stop();
 }
 
+quint64 virtualRig::freq() const { return civ ? civ->frequency() : 0ULL; }
+quint8  virtualRig::mode() const { return civ ? civ->rigMode()   : 0x01; }
+
 void virtualRig::start()
 {
     if (server != nullptr) return;

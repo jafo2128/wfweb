@@ -21,6 +21,7 @@ public:
 
     bool isTransmitting() const { return ptt; }
     quint64 frequency() const { return freq; }
+    quint8 rigMode() const { return mode; }
 
     // Drive the synthesized S-meter from an RX audio peak (0..32767).
     void setSMeterFromPeak(quint16 peak);
