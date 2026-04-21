@@ -41,12 +41,17 @@ int main(int argc, char* argv[])
     QCommandLineOption attenOpt("atten",
         "Linear gain applied to inter-rig audio (default 0.1 ≈ -20 dB).",
         "gain", "0.1");
+    QCommandLineOption noiseOpt("noise",
+        "Per-rig noise floor RMS in Int16 units (0..32767). Default 0 "
+        "(silent floor). Try ~50 for a quiet band, ~500 for a noisy one.",
+        "rms", "0");
     QCommandLineOption broadcastOpt("broadcast",
         "Disable freq/mode gating; every rig hears every other rig.");
 
     parser.addOption(rigsOpt);
     parser.addOption(basePortOpt);
     parser.addOption(attenOpt);
+    parser.addOption(noiseOpt);
     parser.addOption(broadcastOpt);
     parser.process(app);
 
@@ -66,9 +71,15 @@ int main(int argc, char* argv[])
         qCritical() << "Invalid --atten value:" << parser.value(attenOpt);
         return 2;
     }
+    float noise = parser.value(noiseOpt).toFloat(&ok);
+    if (!ok || noise < 0.0f || noise > 32767.0f) {
+        qCritical() << "Invalid --noise value:" << parser.value(noiseOpt);
+        return 2;
+    }
 
     auto* mixer = new channelMixer(n, &app);
     mixer->setAttenuation(atten);
+    mixer->setNoiseLevel(noise);
     mixer->setChannelRouting(!parser.isSet(broadcastOpt));
 
     QList<virtualRig*> rigs;

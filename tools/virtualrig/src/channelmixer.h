@@ -22,9 +22,20 @@ class channelMixer : public QObject
 public:
     explicit channelMixer(int numRigs, QObject* parent = nullptr);
 
-    // Linear gain applied to the 16-bit PCM samples when copying TX -> RX.
-    // Default ~0.1 (≈ -20 dB).
+    // Set uniform linear gain on every src→dst link. Default ~0.1 (≈ -20 dB).
     void setAttenuation(float gain);
+
+    // Override gain for a specific directed pair. Allows asymmetric links
+    // (one-way hearing, partial fade) without affecting the rest of the bus.
+    void setLinkAttenuation(int src, int dst, float gain);
+    float linkAttenuation(int src, int dst) const;
+
+    // Per-destination-rig noise floor, in Int16 RMS units (0..32767).
+    // White Gaussian noise at this RMS is added to every chunk the rig emits
+    // to its client — so the noise floor is always present, signal or not.
+    void setNoiseLevel(float rms);                  // all rigs
+    void setNoiseLevel(int dstRig, float rms);      // one rig
+    float noiseLevel(int dstRig) const;
 
     // Disable channel gating (everyone hears everyone). Default: enabled.
     void setChannelRouting(bool on);
@@ -44,10 +55,13 @@ signals:
 
 private:
     int numRigs;
-    float attenuation;
     bool channelRouting;
+    // linkGain[src][dst] — directed gain per pair. Diagonal unused.
+    QVector<QVector<float>> linkGain;
+    // noiseRms[rig] — receive-side noise added on emit.
+    QVector<float> noiseRms;
     QVector<virtualRig*> rigs;
-    QMutex mx;
+    mutable QMutex mx;
 };
 
 #endif

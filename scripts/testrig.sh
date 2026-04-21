@@ -3,10 +3,13 @@
 # each wfweb connecting over LAN UDP to its own virtual IC-7610.
 #
 # Usage:
-#   ./scripts/testrig.sh up [N]     (default N=2, max 16)
+#   ./scripts/testrig.sh up [N] [virtualrig flags...]   (default N=2, max 16)
 #   ./scripts/testrig.sh down
 #   ./scripts/testrig.sh status
 #   ./scripts/testrig.sh logs [i|virtualrig]
+#
+# Any arguments after N are forwarded to the virtualrig binary, e.g.:
+#   ./scripts/testrig.sh up 3 --noise 500 --atten 0.3 --broadcast
 #
 # Scratch dir .testrig/ holds PIDs, logs, and per-instance settings files.
 
@@ -82,6 +85,9 @@ wait_for_web() {
 cmd_up() {
     require_binaries
     local n=${1:-2}
+    shift || true
+    # Anything left is a passthrough to virtualrig (--noise, --atten, etc.).
+    local extra_args=("$@")
     [[ "$n" =~ ^[0-9]+$ ]] || die "N must be an integer"
     (( n >= 1 && n <= 16 )) || die "N must be 1..16"
 
@@ -98,7 +104,7 @@ cmd_up() {
     # local — we don't touch the parent shell's cwd.
     (
         cd "$REPO"
-        nohup "$VIRTUALRIG" --rigs "$n" --base-port "$BASE_PORT" \
+        nohup "$VIRTUALRIG" --rigs "$n" --base-port "$BASE_PORT" "${extra_args[@]}" \
             > "$SCRATCH/virtualrig.log" 2>&1 &
         echo $! > "$SCRATCH/virtualrig.pid"
     )

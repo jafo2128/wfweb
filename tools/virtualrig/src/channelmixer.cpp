@@ -36,15 +36,57 @@ bool channelCompatible(quint64 srcFreq, quint8 srcMode,
 } // namespace
 
 channelMixer::channelMixer(int numRigs, QObject* parent)
-    : QObject(parent), numRigs(numRigs), attenuation(0.1f), channelRouting(true)
+    : QObject(parent), numRigs(numRigs), channelRouting(true)
 {
     rigs.resize(numRigs);
+    noiseRms = QVector<float>(numRigs, 0.0f);
+    linkGain.resize(numRigs);
+    for (auto& row : linkGain) row = QVector<float>(numRigs, 0.1f);
 }
 
 void channelMixer::setAttenuation(float gain)
 {
     QMutexLocker lock(&mx);
-    attenuation = gain;
+    for (auto& row : linkGain)
+        for (auto& g : row) g = gain;
+}
+
+void channelMixer::setLinkAttenuation(int src, int dst, float gain)
+{
+    QMutexLocker lock(&mx);
+    if (src >= 0 && src < linkGain.size() &&
+        dst >= 0 && dst < linkGain[src].size()) {
+        linkGain[src][dst] = gain;
+    }
+}
+
+float channelMixer::linkAttenuation(int src, int dst) const
+{
+    QMutexLocker lock(&mx);
+    if (src >= 0 && src < linkGain.size() &&
+        dst >= 0 && dst < linkGain[src].size()) {
+        return linkGain[src][dst];
+    }
+    return 0.0f;
+}
+
+void channelMixer::setNoiseLevel(float rms)
+{
+    QMutexLocker lock(&mx);
+    for (auto& v : noiseRms) v = rms;
+}
+
+void channelMixer::setNoiseLevel(int dstRig, float rms)
+{
+    QMutexLocker lock(&mx);
+    if (dstRig >= 0 && dstRig < noiseRms.size()) noiseRms[dstRig] = rms;
+}
+
+float channelMixer::noiseLevel(int dstRig) const
+{
+    QMutexLocker lock(&mx);
+    if (dstRig >= 0 && dstRig < noiseRms.size()) return noiseRms[dstRig];
+    return 0.0f;
 }
 
 void channelMixer::setChannelRouting(bool on)
@@ -61,32 +103,23 @@ void channelMixer::registerRig(int idx, virtualRig* rig)
 
 void channelMixer::pushTxAudio(int srcRig, const audioPacket& pkt)
 {
-    float gain;
     int n;
     bool gate;
     QVector<virtualRig*> snap;
+    QVector<float> gains;
     {
         QMutexLocker lock(&mx);
-        gain = attenuation;
         n = numRigs;
         gate = channelRouting;
         snap = rigs;
+        if (srcRig >= 0 && srcRig < linkGain.size())
+            gains = linkGain[srcRig];
+        else
+            gains = QVector<float>(numRigs, 0.0f);
     }
 
-    // Scale a copy of the PCM-16LE payload. If the negotiated codec is
-    // something else, we still forward the bytes unchanged — MVP pins caps
-    // to LPCM so this path is the expected one.
-    audioPacket scaled = pkt;
-    const int sampleCount = scaled.data.size() / 2;
-    if (sampleCount > 0 && gain != 1.0f) {
-        qint16* samples = reinterpret_cast<qint16*>(scaled.data.data());
-        for (int i = 0; i < sampleCount; ++i) {
-            int v = static_cast<int>(samples[i] * gain);
-            if (v > 32767) v = 32767;
-            if (v < -32768) v = -32768;
-            samples[i] = static_cast<qint16>(v);
-        }
-    }
+    const int sampleCount = pkt.data.size() / (int)sizeof(qint16);
+    const qint16* srcSamples = reinterpret_cast<const qint16*>(pkt.data.constData());
 
     static int tick = 0;
     if (++tick % 50 == 1) {
@@ -94,8 +127,6 @@ void channelMixer::pushTxAudio(int srcRig, const audioPacket& pkt)
                 << "n=" << n;
     }
 
-    // Cache the source's channel so we only read it once even if the user
-    // is rapidly retuning during TX.
     quint64 srcFreq = 0;
     quint8 srcMode = 0;
     if (gate && srcRig >= 0 && srcRig < snap.size() && snap[srcRig]) {
@@ -111,6 +142,23 @@ void channelMixer::pushTxAudio(int srcRig, const audioPacket& pkt)
                 continue;
             }
         }
-        emit rxAudioForRig(dst, scaled);
+
+        // Per-link scaling: build a fresh PCM copy so each destination can
+        // see a different fade without interfering with the others.
+        float g = (dst < gains.size()) ? gains[dst] : 0.0f;
+        audioPacket out = pkt;
+        out.data.resize(pkt.data.size());
+        qint16* dstSamples = reinterpret_cast<qint16*>(out.data.data());
+        if (g == 1.0f) {
+            memcpy(out.data.data(), pkt.data.constData(), pkt.data.size());
+        } else {
+            for (int i = 0; i < sampleCount; ++i) {
+                int v = static_cast<int>(srcSamples[i] * g);
+                if (v > 32767) v = 32767;
+                if (v < -32768) v = -32768;
+                dstSamples[i] = static_cast<qint16>(v);
+            }
+        }
+        emit rxAudioForRig(dst, out);
     }
 }

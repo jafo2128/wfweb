@@ -9,6 +9,7 @@
 #include <QDebug>
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <random>
 
 virtualRig::virtualRig(const Config& cfg, channelMixer* mixer, QObject* parent)
     : QObject(parent), cfg(cfg), mixer(mixer)
@@ -179,6 +180,27 @@ void virtualRig::emitIdleRx()
             if (v > peak) peak = v;
         }
     }
+    // Additive white Gaussian noise at the rig's configured floor. Makes
+    // the noise floor audible when nothing is being received, and gives
+    // RADE/FreeDV robustness testing a real SNR target to hit.
+    float nRms = mixer ? mixer->noiseLevel(cfg.index) : 0.0f;
+    if (nRms > 0.0f) {
+        static thread_local std::mt19937 rng{std::random_device{}()};
+        std::normal_distribution<float> dist(0.0f, nRms);
+        qint16* samples = reinterpret_cast<qint16*>(data.data());
+        const int n = data.size() / (int)sizeof(qint16);
+        qint16 noisyPeak = peak;
+        for (int i = 0; i < n; ++i) {
+            int v = samples[i] + (int)dist(rng);
+            if (v > 32767) v = 32767;
+            if (v < -32768) v = -32768;
+            samples[i] = (qint16)v;
+            qint16 a = v < 0 ? (qint16)-v : (qint16)v;
+            if (a > noisyPeak) noisyPeak = a;
+        }
+        peak = noisyPeak;
+    }
+
     if (civ) civ->setSMeterFromPeak((quint16)peak);
     audioPacket pkt;
     pkt.data = data;
