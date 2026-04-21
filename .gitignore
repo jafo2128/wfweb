@@ -22,6 +22,8 @@ IC7300-screenshots/
 test.log
 Makefile.server
 wfweb
+tools/virtualrig/virtualrig
+.testrig/
 .claude/settings.local.json
 *.ini
 .DS_Store

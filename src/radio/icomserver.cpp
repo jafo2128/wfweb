@@ -358,6 +358,13 @@ void icomServer::controlReceived()
 
             audioSetup setup;
             setup.resampleQuality = config->resampleQuality;
+            // In LAN mode we don't spawn local audio handlers (a downstream
+            // process consumes the haveAudioData signal), but we still need
+            // hasTxAudio set so TX audio frames are emitted rather than
+            // dropped at the gate below (icomserver:795).
+            if (config->lan) {
+                hasTxAudio = datagram.senderAddress();
+            }
             foreach (RIGCONFIG* radio, config->rigs) {
                 if ((!memcmp(radio->guid, current->guid, GUIDLEN) || config->rigs.size()==1) && radio->txaudio == Q_NULLPTR && !config->lan)
                 {
@@ -632,9 +639,13 @@ void icomServer::civReceived()
                                 // Only send to the rig that it belongs to!
                                 //qDebug(logRigServer()) << "Sending data" << r.mid(0x15);
 #if (QT_VERSION >= QT_VERSION_CHECK(5,10,0))
-                                QMetaObject::invokeMethod(radio->rig, [=]() {
-                                    radio->rig->dataFromServer(r.mid(0x15));;
-                                }, Qt::DirectConnection);
+                                if (radio->rig != Q_NULLPTR) {
+                                    QMetaObject::invokeMethod(radio->rig, [=]() {
+                                        radio->rig->dataFromServer(r.mid(0x15));;
+                                    }, Qt::DirectConnection);
+                                } else {
+                                    emit haveDataFromServer(r.mid(0x15));
+                                }
 #else
                                 #warning "QT 5.9 is not fully supported, multiple rigs will NOT work!"
                                 emit haveDataFromServer(r.mid(0x15));
@@ -779,7 +790,7 @@ void icomServer::audioReceived()
             */
             control_packet_t in = (control_packet_t)r.constData();
 
-            if (in->type != 0x01) { 
+            if (in->type != 0x01) {
                 // Opus packets can be smaller than this! && in->len >= 0xAC) {
                 if (in->seq == 0)
                 {
@@ -788,6 +799,15 @@ void icomServer::audioReceived()
                 }
 
                 QTime lastReceived = QTime::currentTime().addMSecs(current->timeDifference);
+                static int rxTick = 0;
+                if (++rxTick % 100 == 1) {
+                    qInfo(logRigServer()) << "AUDIO rx len=" << r.length()
+                        << "hasTxAudio==client:" << (hasTxAudio == current->ipAddress)
+                        << "hasTxAudio=" << hasTxAudio.toString()
+                        << "client=" << current->ipAddress.toString()
+                        << "lateBy=" << (lastReceived.msecsTo(QTime::currentTime()))
+                        << "txBufferLen=" << current->controlClient->txBufferLen;
+                }
                 if (hasTxAudio == current->ipAddress && lastReceived < QTime::currentTime().addMSecs(current->controlClient->txBufferLen))
                 {
                     // 0xac is the smallest possible audio packet.
@@ -1625,8 +1645,9 @@ void icomServer::dataForServer(QByteArray d)
 {
     rigCommander* sender = qobject_cast<rigCommander*>(QObject::sender());
 
-    //qInfo(logRigServer()) << "Received data for server clients";
-    if (sender == Q_NULLPTR)
+    // In single-rig mode, senderless callers (e.g. the virtual-rig
+    // simulator) are allowed — GUID matching is skipped below.
+    if (sender == Q_NULLPTR && config->rigs.size() > 1)
     {
         return;
     }
@@ -1638,7 +1659,7 @@ void icomServer::dataForServer(QByteArray d)
             continue;
         }
         // Use the GUID to determine which radio the response is from
-        if (memcmp(sender->getGUID(), client->guid, GUIDLEN) && config->rigs.size()>1)
+        if (sender != Q_NULLPTR && memcmp(sender->getGUID(), client->guid, GUIDLEN) && config->rigs.size()>1)
         {
             continue; // Rig guid doesn't match the one requested by the client.
         }
