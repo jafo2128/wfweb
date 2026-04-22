@@ -358,10 +358,13 @@ void icomServer::controlReceived()
 
             audioSetup setup;
             setup.resampleQuality = config->resampleQuality;
-            // In LAN mode we don't spawn local audio handlers (a downstream
-            // process consumes the haveAudioData signal), but we still need
-            // hasTxAudio set so TX audio frames are emitted rather than
-            // dropped at the gate below (icomserver:795).
+            // config->lan == true means the rig backend lives elsewhere
+            // (the haveAudioData signal is consumed externally — by a
+            // LAN-relay or by the virtualrig mixer). In that mode we skip
+            // spawning local audio handlers, but we still need hasTxAudio
+            // set so TX audio frames aren't dropped at the gate below
+            // (icomserver.cpp:795). The non-LAN branch sets this too, at
+            // line 408, once local handlers are wired up.
             if (config->lan) {
                 hasTxAudio = datagram.senderAddress();
             }
