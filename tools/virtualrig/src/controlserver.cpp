@@ -79,7 +79,8 @@ function gainToDb(g) {
 function dbToGain(db) { return Math.pow(10, db/20); }
 
 let state = null;
-let activeEditor = null;   // DOM element currently being edited; don't overwrite
+let lastRigCount = -1;
+let lastAttenKey = "";       // band + rigCount — rebuild pair table when either changes
 
 async function fetchState() {
   const r = await fetch("/api/state");
@@ -93,51 +94,61 @@ async function postSet(obj) {
     headers: {"Content-Type":"application/json"},
     body: JSON.stringify(obj)
   });
-  fetchState();
+  // Do not refetch synchronously — the poll loop will pick it up. Refetching
+  // here causes an extra render() which can interrupt the user mid-keystroke.
 }
 
-function renderRigs() {
+// Build the rigs table once; on each poll just update the text cells and
+// any input whose <input> isn't currently focused. Rebuilding innerHTML
+// would blow away the input the user is typing into, making them unable
+// to type more than a single character before the next 500 ms poll fires.
+function ensureRigsTable() {
+  if (lastRigCount === state.rigs.length) return;
+  lastRigCount = state.rigs.length;
   const tbody = document.querySelector("#rigs tbody");
-  const rows = state.rigs.map(r => {
-    const editing = activeEditor && activeEditor.dataset.kind === "noise" &&
-                    parseInt(activeEditor.dataset.rig) === r.idx;
-    return `<tr>
+  tbody.innerHTML = state.rigs.map(r => `
+    <tr data-rig="${r.idx}">
       <td>${r.idx}</td>
       <td>${r.name}</td>
-      <td>${fmtHz(r.freq)}</td>
-      <td><span class="band-pill">${r.band}</span></td>
-      <td>${MODE_NAMES[r.mode] || "0x"+r.mode.toString(16)}</td>
-      <td class="${r.ptt?"ptt-on":"ptt-off"}">${r.ptt?"TX":"—"}</td>
-      <td>${editing
-            ? `<input type="number" data-kind="noise" data-rig="${r.idx}" value="${activeEditor.value}" min="0" max="1000" step="1">`
-            : `<input type="number" data-kind="noise" data-rig="${r.idx}" value="${r.noiseRms}" min="0" max="1000" step="1">`
-          }</td>
-    </tr>`;
-  });
-  tbody.innerHTML = rows.join("");
+      <td data-cell="freq"></td>
+      <td data-cell="band"></td>
+      <td data-cell="mode"></td>
+      <td data-cell="ptt"></td>
+      <td><input type="number" data-kind="noise" data-rig="${r.idx}" min="0" max="1000" step="1"></td>
+    </tr>`).join("");
 }
 
-function renderAtten() {
+function updateRigsTable() {
+  ensureRigsTable();
+  for (const r of state.rigs) {
+    const tr = document.querySelector(`tr[data-rig="${r.idx}"]`);
+    if (!tr) continue;
+    tr.querySelector('[data-cell="freq"]').textContent = fmtHz(r.freq);
+    tr.querySelector('[data-cell="band"]').innerHTML = `<span class="band-pill">${r.band}</span>`;
+    tr.querySelector('[data-cell="mode"]').textContent = MODE_NAMES[r.mode] || "0x"+r.mode.toString(16);
+    const pttCell = tr.querySelector('[data-cell="ptt"]');
+    pttCell.textContent = r.ptt ? "TX" : "—";
+    pttCell.className = r.ptt ? "ptt-on" : "ptt-off";
+    const inp = tr.querySelector('input[data-kind="noise"]');
+    if (inp && document.activeElement !== inp) inp.value = r.noiseRms;
+  }
+}
+
+function ensureAttenTable() {
   const band = document.getElementById("bandSel").value;
+  const key = band + "/" + state.rigs.length;
+  if (key === lastAttenKey) return;
+  lastAttenKey = key;
+
   const body = document.querySelector("#atten tbody");
   const n = state.rigs.length;
-
-  // One row per unordered pair (i < j). Edits to this cell set both
-  // directions on the server, matching the physical path.
   let rows = "";
   for (let i = 0; i < n; ++i) {
     for (let j = i + 1; j < n; ++j) {
-      const g = state.atten[band][i][j];
-      const db = gainToDb(g).toFixed(1);
-      const editing = activeEditor && activeEditor.dataset.kind === "atten" &&
-                      parseInt(activeEditor.dataset.src) === i &&
-                      parseInt(activeEditor.dataset.dst) === j &&
-                      activeEditor.dataset.band === band;
-      const val = editing ? activeEditor.value : db;
-      rows += `<tr>
+      rows += `<tr data-pair="${i}-${j}">
         <td><span class="src">#${i}</span> ↔ <span class="src">#${j}</span>
             <span class="hint">&nbsp;${state.rigs[i].name} ↔ ${state.rigs[j].name}</span></td>
-        <td><input type="number" data-kind="atten" data-src="${i}" data-dst="${j}" data-band="${band}" value="${val}" min="-120" max="20" step="1"></td>
+        <td><input type="number" data-kind="atten" data-src="${i}" data-dst="${j}" data-band="${band}" min="-120" max="20" step="1"></td>
       </tr>`;
     }
   }
@@ -145,45 +156,53 @@ function renderAtten() {
   body.innerHTML = rows;
 }
 
+function updateAttenTable() {
+  ensureAttenTable();
+  const band = document.getElementById("bandSel").value;
+  const n = state.rigs.length;
+  for (let i = 0; i < n; ++i) {
+    for (let j = i + 1; j < n; ++j) {
+      const inp = document.querySelector(`tr[data-pair="${i}-${j}"] input[data-kind="atten"]`);
+      if (!inp) continue;
+      inp.dataset.band = band;
+      if (document.activeElement !== inp) {
+        inp.value = gainToDb(state.atten[band][i][j]).toFixed(1);
+      }
+    }
+  }
+}
+
 function renderBandSelector() {
   const sel = document.getElementById("bandSel");
-  const prev = sel.value;
+  if (sel.options.length) return;  // populate once; user's choice wins
   sel.innerHTML = BANDS.map(b => `<option value="${b}">${b}</option>`).join("");
-  if (prev) sel.value = prev;
-  else {
-    // Default to whichever band rig #0 is currently on.
-    if (state && state.rigs.length) sel.value = state.rigs[0].band;
-  }
+  if (state && state.rigs.length) sel.value = state.rigs[0].band;
 }
 
 function render() {
   renderBandSelector();
-  renderRigs();
-  renderAtten();
+  updateRigsTable();
+  updateAttenTable();
   document.getElementById("buildStamp").textContent = "virtualrig build: " + (state.build || "unknown");
 }
 
-document.addEventListener("focusin", e => {
-  if (e.target.matches("input[data-kind]")) activeEditor = e.target;
-});
-document.addEventListener("focusout", e => {
-  if (e.target === activeEditor) activeEditor = null;
-});
 document.addEventListener("change", e => {
   const el = e.target;
   if (!el.matches("input[data-kind]")) return;
+  const v = parseFloat(el.value);
+  if (!Number.isFinite(v)) return;
   if (el.dataset.kind === "noise") {
-    postSet({type:"noise", rig: parseInt(el.dataset.rig), rms: parseFloat(el.value)});
+    postSet({type:"noise", rig: parseInt(el.dataset.rig), rms: v});
   } else if (el.dataset.kind === "atten") {
     postSet({type:"atten",
              src: parseInt(el.dataset.src),
              dst: parseInt(el.dataset.dst),
              band: el.dataset.band,
-             gain: dbToGain(parseFloat(el.value))});
+             gain: dbToGain(v)});
   }
 });
 document.getElementById("bandSel").addEventListener("change", () => {
-  if (state) renderAtten();
+  if (state) { lastAttenKey = ""; updateAttenTable(); }
 });
 
 fetchState();
