@@ -294,6 +294,9 @@ void controlServer::sendResponse(QTcpSocket* s, int status,
     resp += "HTTP/1.1 " + QByteArray::number(status) + " " + reason + "\r\n";
     resp += "Content-Type: " + contentType + "\r\n";
     resp += "Content-Length: " + QByteArray::number(body.size()) + "\r\n";
+    // The UI evolves across rebuilds; don't let the browser hold onto a
+    // stale copy after a restart.
+    resp += "Cache-Control: no-store\r\n";
     resp += "Connection: close\r\n\r\n";
     resp += body;
     s->write(resp);
