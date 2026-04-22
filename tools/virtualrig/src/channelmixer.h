@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QMutex>
+#include <QString>
 #include <QVector>
 
 #include "audioconverter.h"
@@ -20,15 +21,28 @@ class channelMixer : public QObject
     Q_OBJECT
 
 public:
+    // Ham band buckets used by the per-band attenuation matrix. "Other"
+    // catches anything outside the listed ranges so we don't lose traffic.
+    enum Band {
+        Band160m = 0, Band80m, Band60m, Band40m, Band30m, Band20m,
+        Band17m, Band15m, Band12m, Band10m, Band6m, Band2m, Band70cm,
+        BandOther,
+        BandCount
+    };
+    static Band bandForFreq(quint64 hz);
+    static QString bandName(Band b);
+
     explicit channelMixer(int numRigs, QObject* parent = nullptr);
 
-    // Set uniform linear gain on every src→dst link. Default ~0.1 (≈ -20 dB).
+    // Set uniform linear gain across every src→dst link and every band.
+    // Default ~0.1 (≈ -20 dB). Convenient for quick CLI setup.
     void setAttenuation(float gain);
 
-    // Override gain for a specific directed pair. Allows asymmetric links
-    // (one-way hearing, partial fade) without affecting the rest of the bus.
-    void setLinkAttenuation(int src, int dst, float gain);
-    float linkAttenuation(int src, int dst) const;
+    // Per-link, per-band gain. "Band" reflects the SOURCE rig's current
+    // band — i.e., what's being transmitted, not what the destination is
+    // tuned to. Unset cells default to whatever setAttenuation() installed.
+    void setLinkAttenuation(int src, int dst, Band band, float gain);
+    float linkAttenuation(int src, int dst, Band band) const;
 
     // Per-destination-rig noise floor, in Int16 RMS units (0..32767).
     // White Gaussian noise at this RMS is added to every chunk the rig emits
@@ -39,10 +53,14 @@ public:
 
     // Disable channel gating (everyone hears everyone). Default: enabled.
     void setChannelRouting(bool on);
+    bool channelRoutingEnabled() const;
 
     // Register a rig so the mixer can read its current freq/mode on forward.
     // Caller retains ownership; must outlive the mixer.
     void registerRig(int idx, virtualRig* rig);
+
+    int rigCount() const { return numRigs; }
+    virtualRig* rigAt(int i) const;
 
 public slots:
     void pushTxAudio(int srcRig, const audioPacket& pkt);
@@ -56,8 +74,9 @@ signals:
 private:
     int numRigs;
     bool channelRouting;
-    // linkGain[src][dst] — directed gain per pair. Diagonal unused.
-    QVector<QVector<float>> linkGain;
+    // linkGainByBand[src][dst][band] — directed gain per pair, per band.
+    // Diagonal (src==dst) is unused.
+    QVector<QVector<QVector<float>>> linkGainByBand;
     // noiseRms[rig] — receive-side noise added on emit.
     QVector<float> noiseRms;
     QVector<virtualRig*> rigs;
